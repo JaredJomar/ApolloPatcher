@@ -506,7 +506,16 @@ static void TryResolveShareUrl(NSString *urlString, void (^successHandler)(NSStr
     return url;
 }
 %end
+
+// Fix crash issue
+// ref: https://github.com/JeffreyCA/Apollo-ImprovedCustomApi/commit/51c72a72fb6ab9b114449202af9ded0f19a03eb4
+%hook NSDictionary
+%new
+- (NSInteger)integerValue {
+    return 0;
+}
 %end
+%end // CustomID end
 
 // Add Settings button
 static NSInteger sectionCount;
@@ -553,7 +562,7 @@ static NSInteger sectionCount;
     [self presentViewController:settingsVC animated:YES completion:nil];
 }
 %end
-%end
+%end // SettingsViewController end
 
 // Sideload fixes
 static NSDictionary *stripGroupAccessAttr(CFDictionaryRef attributes) {
