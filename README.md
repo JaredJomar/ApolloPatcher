@@ -15,6 +15,9 @@ TrollStore IPA: [AppStore++_TrollStore_v1.0.3-2.ipa](https://github.com/CokePoke
 
 Repo: https://cokepokes.github.io
 
+> [!WARNING]
+> Per the recent [Responsible Builder Policy](https://www.reddit.com/r/redditdev/comments/1oug31u/introducing_the_responsible_builder_policy_new/), you can no longer generated new API keys that use Oauth without Reddit's explicit approval. If you have an existing key, you should still be able to use this. If you do not and/or are setting this up for the first time, you are out of luck.
+
 ## Reddit Settings
 
 sign out of all accounts in Apollo before installing
