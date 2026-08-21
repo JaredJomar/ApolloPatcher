@@ -117,18 +117,17 @@ static NSString *const kUserAgent = @"ApolloPatcher/0.1.1 (+https://github.com/i
         NSDictionary *dataDict = children[0][@"data"];
         NSString *name = dataDict[@"name"] ?: @"";
         NSString *title = dataDict[@"subreddit"][@"display_name_prefixed"] ?: [@"u/" stringByAppendingString:name];
-        NSString *desc = dataDict[@"description"] ?: @"";
+NSString *desc = dataDict[@"description"] ?: @"";
         NSString *icon = dataDict[@"icon_img"] ?: dataDict[@"icon_img"] ?: @"";
         NSURL *iconURL = [NSURL URLWithString:icon];
         NSString *banner = dataDict[@"banner_img"] ?: @"";
         NSURL *bannerURL = [NSURL URLWithString:banner];
-        NSNumber *subscribers = dataDict[@"subscribers"];
         ApolloLinkPreviewModelSimple *preview = [[ApolloLinkPreviewModelSimple alloc] initWithURL:url
-                                                                                               title:title
-                                                                                                desc:desc
-                                                                                            imageURL:bannerURL ?: iconURL
-                                                                                          faviconURL:iconURL
-                                                                                            siteName:[@"u/" stringByAppendingString:name]];
+                                                                                                title:title
+                                                                                                 desc:desc
+                                                                                             imageURL:bannerURL ?: iconURL
+                                                                                           faviconURL:iconURL
+                                                                                             siteName:[@"u/" stringByAppendingString:name]];
         completion(preview, nil);
     }];
 }
@@ -148,17 +147,16 @@ static NSString *const kUserAgent = @"ApolloPatcher/0.1.1 (+https://github.com/i
         NSDictionary *dataDict = json[@"data"];
         NSString *title = dataDict[@"display_name_prefixed"] ?: [@"r/" stringByAppendingString:subreddit];
         NSString *desc = dataDict[@"public_description"] ?: dataDict[@"description"] ?: @"";
-        NSString *icon = dataDict[@"icon_img"] ?: dataDict[@"community_icon"] ?: @"";
+NSString *icon = dataDict[@"icon_img"] ?: dataDict[@"community_icon"] ?: @"";
         NSURL *iconURL = [NSURL URLWithString:icon];
         NSString *banner = dataDict[@"banner_background_image"] ?: dataDict[@"banner_img"] ?: @"";
         NSURL *bannerURL = [NSURL URLWithString:banner];
-        NSNumber *subscribers = dataDict[@"subscribers"];
         ApolloLinkPreviewModelSimple *preview = [[ApolloLinkPreviewModelSimple alloc] initWithURL:url
-                                                                                               title:title
-                                                                                                desc:desc
-                                                                                            imageURL:bannerURL ?: iconURL
-                                                                                          faviconURL:iconURL
-                                                                                            siteName:[@"r/" stringByAppendingString:subreddit]];
+                                                                                                title:title
+                                                                                                 desc:desc
+                                                                                             imageURL:bannerURL ?: iconURL
+                                                                                           faviconURL:iconURL
+                                                                                             siteName:[@"r/" stringByAppendingString:subreddit]];
         completion(preview, nil);
     }];
 }
@@ -204,12 +202,13 @@ static NSString *const kUserAgent = @"ApolloPatcher/0.1.1 (+https://github.com/i
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) { completion(nil, [NSError errorWithDomain:@"ApolloLinkPreview" code:-1 userInfo:nil]); return; }
     NSURLRequest *req = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:10.0];
-    [self.session dataTaskWithRequest:req completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:req completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         if (error) { completion(nil, error); return; }
         NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
         if (http.statusCode >= 400) { completion(nil, [NSError errorWithDomain:@"ApolloLinkPreview" code:http.statusCode userInfo:nil]); return; }
         completion(data, nil);
-    }].resume();
+    }];
+    [task resume];
 }
 
 #pragma mark - HTML Parsing Helpers
