@@ -1,7 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <SafariServices/SafariServices.h>
-#import "Preferences.h"
 
 #define NSLog(fmt, ...) NSLog((@"ApolloPatcher:" fmt), ##__VA_ARGS__)
 
@@ -28,12 +27,7 @@ static NSString *kUserAgent;
 
 static UIAlertController *alertController;
 
-@protocol SFSafariViewControllerDelegate;
-@import SafariServices;
 
-@interface SettingsController : PSListController <SFSafariViewControllerDelegate, UIDocumentPickerDelegate>
-@property (nonatomic, strong) id <SFSafariViewControllerDelegate> delegate;
-@end
 
 @interface UIApplication (Private)
 - (void)suspend;
