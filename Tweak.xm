@@ -659,6 +659,12 @@ static NSInteger sectionCount;
         %orig;
     }
 }
+
+%new
+- (void)settingsButtonPushed {
+    UINavigationController *settingsVC = [[UINavigationController alloc] initWithRootViewController:[[SettingsController alloc] init]];
+    [self presentViewController:settingsVC animated:YES completion:nil];
+}
 %end
 
 %end // SettingsViewController end
