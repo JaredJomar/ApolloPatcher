@@ -1,0 +1,174 @@
+name: Build IPA (Auto-inject)
+
+on:
+  workflow_dispatch:
+    inputs:
+      apollo_ipa_url:
+        description: 'Direct URL to a decrypted Apollo IPA (clean, no tweaks)'
+        required: true
+        type: string
+        default: 'https://downloads.apolloreborn.app/apollobase.ipa'
+      output_name:
+        description: 'Output IPA filename (without .ipa extension)'
+        required: false
+        type: string
+        default: 'ApolloPatcher'
+      create_release:
+        description: 'Also publish the IPA as a draft GitHub release'
+        required: false
+        type: boolean
+        default: false
+
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Inject IPA
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Validate inputs
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -z "${{ github.event.inputs.apollo_ipa_url }}" ]; then
+            echo "Error: apollo_ipa_url is required for workflow_dispatch"
+            exit 1
+          fi
+
+      - name: Install build dependencies
+        run: brew install ldid dpkg make
+
+      - name: Add GNU make to PATH
+        run: echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Setup Theos
+        uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          ref: 9bc73406cf80b711ef4d02c15ff1dedc4478a275
+          path: theos
+          submodules: recursive
+
+      - name: Build rootless tweak package
+        run: make package FINALPACKAGE=1
+        env:
+          THEOS: ${{ github.workspace }}/theos
+          THEOS_PACKAGE_SCHEME: rootless
+          ARCHS: arm64
+          TARGET: iphone:16.5:15.0
+
+      - name: Locate built .deb
+        id: locate_deb
+        run: |
+          DEB_PATH=$(ls -1t packages/*.deb | head -1)
+          if [ -z "$DEB_PATH" ]; then
+            echo "Error: no .deb produced by make package"
+            exit 1
+          fi
+          echo "deb_path=$DEB_PATH" >> "$GITHUB_OUTPUT"
+          echo "Built tweak: $DEB_PATH"
+
+      - name: Install cyan injector
+        run: |
+          python3 -m venv "$RUNNER_TEMP/cyan-venv"
+          "$RUNNER_TEMP/cyan-venv/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/cyan-venv/bin/python" -m pip install \
+            "https://github.com/asdfzxcvbn/pyzule-rw/archive/refs/tags/v1.4.4.zip"
+          echo "$RUNNER_TEMP/cyan-venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/cyan-venv/bin/cyan" --help >/dev/null
+          echo "cyan installed: $RUNNER_TEMP/cyan-venv/bin/cyan"
+
+      - name: Download Apollo IPA
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          curl -L --fail --retry 3 "${{ github.event.inputs.apollo_ipa_url }}" -o Apollo.ipa
+          unzip -t Apollo.ipa >/dev/null
+          echo "Apollo.ipa size: $(wc -c < Apollo.ipa) bytes"
+
+      - name: Download Apollo IPA (from tag push)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if [ -z "${{ secrets.APOLLO_BASE_IPA_URL }}" ]; then
+            echo "Error: APOLLO_BASE_IPA_URL secret required for tag push builds"
+            exit 1
+          fi
+          curl -L --fail --retry 3 "${{ secrets.APOLLO_BASE_IPA_URL }}" -o Apollo.ipa
+          unzip -t Apollo.ipa >/dev/null
+          echo "Apollo.ipa size: $(wc -c < Apollo.ipa) bytes"
+
+      - name: Inject tweak with cyan
+        run: |
+          DEB="${{ steps.locate_deb.outputs.deb_path }}"
+          echo "Injecting tweak with cyan (strip extensions)..."
+          "$RUNNER_TEMP/cyan-venv/bin/cyan" -i Apollo.ipa -f "$DEB" -o injected.ipa -e
+          if [ ! -f injected.ipa ]; then
+            echo "Error: injection did not produce injected.ipa"
+            exit 1
+          fi
+          mv -f injected.ipa Apollo.ipa
+          echo "Injected Apollo.ipa size: $(wc -c < Apollo.ipa) bytes"
+
+      - name: Build output filename
+        id: outname
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            BASE="${{ github.event.inputs.output_name }}"
+          else
+            BASE="ApolloPatcher-${{ github.ref_name }}"
+          fi
+          [ -z "$BASE" ] && BASE="ApolloPatcher"
+          OUTPUT_IPA="${BASE}.ipa"
+          echo "output_ipa=${OUTPUT_IPA}" >> "$GITHUB_OUTPUT"
+          echo "Output filename: ${OUTPUT_IPA}"
+
+      - name: Finalize IPA
+        run: |
+          OUTPUT_IPA="${{ steps.outname.outputs.output_ipa }}"
+          mv -f Apollo.ipa "$OUTPUT_IPA"
+          if [ ! -f "$OUTPUT_IPA" ]; then
+            echo "Error: expected output $OUTPUT_IPA was not produced."
+            ls -la
+            exit 1
+          fi
+          echo "Final IPA: ${OUTPUT_IPA} ($(wc -c < "$OUTPUT_IPA") bytes)"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.outname.outputs.output_ipa }}
+          path: ${{ steps.outname.outputs.output_ipa }}
+          retention-days: 30
+
+      - name: Create Release (on tag push)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: ApolloPatcher ${{ github.ref_name }}
+          files: ${{ steps.outname.outputs.output_ipa }}
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: build-${{ github.run_number }}
+          name: ApolloPatcher build ${{ github.run_number }}
+          files: ${{ steps.outname.outputs.output_ipa }}
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
