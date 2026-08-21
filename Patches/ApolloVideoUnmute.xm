@@ -104,6 +104,7 @@ static BOOL ObjectsMatch(id lhs, id rhs) {
     return lhs && rhs && (lhs == rhs || [lhs isEqual:rhs]);
 }
 
+static UITableView *GetTableViewFromViewController(UIViewController *viewController) __attribute__((unused));
 static UITableView *GetTableViewFromViewController(UIViewController *viewController) {
     UIView *rootView = [viewController view];
     if (!rootView) return nil;
@@ -114,6 +115,7 @@ static UITableView *GetTableViewFromViewController(UIViewController *viewControl
     return nil;
 }
 
+static void EnumerateVisibleRichMediaNodes(UITableView *tableView, void (^block)(id richMediaNode)) __attribute__((unused));
 static void EnumerateVisibleRichMediaNodes(UITableView *tableView, void (^block)(id richMediaNode)) {
     for (UITableViewCell *cell in [tableView visibleCells]) {
         SEL nodeSel = NSSelectorFromString(@"node");
@@ -134,6 +136,7 @@ static Class PostsSearchResultsViewControllerClass(void) {
     return cls;
 }
 
+static BOOL NodeIsInSearchResultsController(id node) __attribute__((unused));
 static BOOL NodeIsInSearchResultsController(id node) {
     Class searchVCClass = PostsSearchResultsViewControllerClass();
     if (!searchVCClass || ![node respondsToSelector:@selector(view)]) return NO;
@@ -191,6 +194,7 @@ static void SyncRichMediaNodeMuteButton(id richMediaNode) {
     SyncMuteButtonIcon(richMediaNode, [player isMuted]);
 }
 
+static void SyncVisibleCellMuteButtons(id cellNode) __attribute__((unused));
 static void SyncVisibleCellMuteButtons(id cellNode) {
     if (!cellNode) return;
     SyncRichMediaNodeMuteButton(GetIvarObjectQuiet(cellNode, "richMediaNode"));
@@ -332,6 +336,7 @@ static BOOL FeedVideosShouldBeAudible(void) {
     return NO;
 }
 
+static void NoteFeedMuteButtonChoice(BOOL nowAudible) __attribute__((unused));
 static void NoteFeedMuteButtonChoice(BOOL nowAudible) {
     if (sUnmuteFeedVideos != 1) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -407,6 +412,7 @@ static void ReleaseFeedAudioIfOwnedBy(id richMediaNode) {
     sFeedAudibleVideoNode = nil;
 }
 
+static void ScheduleFeedUnmuteAfterFullscreen(void) __attribute__((unused));
 static void ScheduleFeedUnmuteAfterFullscreen(void) {
     if (sUnmuteFeedVideos == 0 || !sFeedAudibleRichMediaNode) return;
     __weak id weakNode = sFeedAudibleRichMediaNode;

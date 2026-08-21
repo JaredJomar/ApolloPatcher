@@ -205,9 +205,6 @@ static BOOL ShouldAugmentSpeedMenu(NSArray<UIMenuElement *> *children) {
 
 #pragma mark - Row icons
 
-static const CGFloat kSpeedIconSourcePx = 144.0;
-static const CGFloat kSpeedIconPointSize = 34.0;
-
 static UIImage *LoadBundledSpeedIcon(NSString *name) {
     // We don't have ApolloBundledResourcePath; rely on fallback to neighbour icons
     return nil;
