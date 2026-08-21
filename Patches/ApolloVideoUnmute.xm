@@ -427,67 +427,10 @@ static void HandleFeedCellVisibilityEvent(id cellNode, unsigned long long event)
     }
     BOOL applied = ApplyFeedUnmuteIfNeeded(richMediaNode, @"visible");
     if (!applied) applied = ApplyFeedUnmuteIfNeeded(crosspostNode, @"visible crosspost");
-    if (!applied && event == 0 && (richMediaNode || crosspostNode)) {
+if (!applied && event == 0 && (richMediaNode || crosspostNode)) {
         NSUInteger generation = ++sFeedUnmuteRetryGeneration;
         ScheduleFeedUnmuteRetry(richMediaNode ?: crosspostNode, 4, generation);
     }
-}
-
-static void HandleCommentsRichMediaVisibilityEvent(id visibilityOwner, id richMediaNode, unsigned long long event, NSString *contextLabel) {
-    if (!visibilityOwner || !richMediaNode) return;
-    if (event == 2) {
-        if (sIsNavigatingBack) {
-            NSLog(@"ApolloPatcher:[VideoUnmute] %@ cell invisible during back nav — keeping protection", contextLabel);
-            return;
-        }
-        NSLog(@"ApolloPatcher:[VideoUnmute] %@ cell invisible — clearing protection and refs", contextLabel);
-        sAutoUnmutedPlayer = nil;
-        id videoNode = GetVideoNodeFromRichMediaNode(richMediaNode);
-        if (videoNode) {
-            SEL setMutedSel = NSSelectorFromString(@"setMuted:");
-            if ([videoNode respondsToSelector:setMutedSel]) {
-                ((void (*)(id, SEL, BOOL))objc_msgSend)(videoNode, setMutedSel, YES);
-            }
-            AVPlayer *player = GetPlayerFromVideoNode(videoNode);
-            if (player) [player setMuted:YES];
-        }
-        sCommentsRichMediaNode = nil;
-        sCommentsVideoNode = nil;
-        return;
-    }
-    BOOL unmuteApplied = objc_getAssociatedObject(visibilityOwner, kAutoUnmuteAppliedKey) != nil;
-    id videoNode = GetVideoNodeFromRichMediaNode(richMediaNode);
-    if (!videoNode) return;
-    if (sUnmuteCommentsVideos >= 1) {
-        sCommentsRichMediaNode = richMediaNode;
-        sCommentsVideoNode = videoNode;
-    }
-    AVPlayer *player = GetPlayerFromVideoNode(videoNode);
-    if (!player) {
-        NSLog(@"ApolloPatcher:[VideoUnmute] %@ player not ready (event=%llu), scheduling retry", contextLabel, event);
-        __weak id weakOwner = visibilityOwner;
-        __weak id weakRichMediaNode = richMediaNode;
-        __weak id weakVideoNode = videoNode;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            id strongOwner = weakOwner; id rmNode = weakRichMediaNode; id vNode = weakVideoNode;
-            if (!strongOwner || !rmNode || !vNode) return;
-            AVPlayer *retryPlayer = GetPlayerFromVideoNode(vNode);
-            if (!retryPlayer) { NSLog(@"ApolloPatcher:[VideoUnmute] %@ retry: player still not ready", contextLabel); return; }
-            SyncMuteButtonIcon(rmNode, [retryPlayer isMuted]);
-            if (sUnmuteCommentsVideos == 2 && !objc_getAssociatedObject(strongOwner, kAutoUnmuteAppliedKey)) {
-                objc_setAssociatedObject(strongOwner, kAutoUnmuteAppliedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                NSLog(@"ApolloPatcher:[VideoUnmute] %@ retry: unmuting after delay (muted=%d)", contextLabel, [retryPlayer isMuted]);
-                UnmuteRichMediaNode(rmNode, vNode);
-            }
-        });
-        return;
-    }
-    SyncMuteButtonIcon(richMediaNode, [player isMuted]);
-    if (sUnmuteCommentsVideos != 2) return;
-    if (unmuteApplied) return;
-    objc_setAssociatedObject(visibilityOwner, kAutoUnmuteAppliedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NSLog(@"ApolloPatcher:[VideoUnmute] %@ auto-unmuting (event=%llu, muted=%d)", contextLabel, event, [player isMuted]);
-    UnmuteRichMediaNode(richMediaNode, videoNode);
 }
 
 // =============================================================================

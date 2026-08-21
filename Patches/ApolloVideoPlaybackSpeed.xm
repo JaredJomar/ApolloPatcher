@@ -190,8 +190,6 @@ static BOOL TitleIsSpeed(NSString *title) {
 
 static BOOL ShouldAugmentSpeedMenu(NSArray<UIMenuElement *> *children) {
     if (children.count < 3) return NO;
-    NSString *slowTitle = SpeedTitle(kSpeedSlow);
-    NSString *fastTitle = SpeedTitle(kSpeedFast);
 
     NSUInteger speedCount = 0;
     for (UIMenuElement *element in children) {
@@ -246,9 +244,6 @@ static UIAction *MakeSpeedAction(float speed, UIImage *image, float currentSpeed
 }
 
 static NSArray<UIMenuElement *> *AugmentedSpeedChildren(NSArray<UIMenuElement *> *children) {
-    NSString *half = SpeedTitle(0.5f);
-    NSString *oneHalf = SpeedTitle(1.5f);
-
     UIImage *slowImage = nil;
     UIImage *fastImage = nil;
     for (UIMenuElement *element in children) {
