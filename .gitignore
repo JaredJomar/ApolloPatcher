@@ -11,3 +11,4 @@ _/*
 *.zip
 *.ipa
 doc/
+.omo*
