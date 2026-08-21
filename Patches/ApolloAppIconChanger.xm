@@ -18,10 +18,8 @@ static NSString *const kAppIconKey = @"AppIcon";
     return %orig(iconName, completionHandler);
 }
 
-%new
 - (NSArray<NSString *> * _Nullable)supportsAlternateIcons {
     return @[@"default", @"icon-blue", @"icon-red", @"icon-green", @"icon-purple", @"icon-orange", @"icon-pink", @"icon-teal", @"icon-gold", @"icon-dark"];
 }
-%end
 
 %end
