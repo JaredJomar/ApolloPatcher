@@ -1,6 +1,7 @@
 #import "header.h"
 #import "fishhook.h"
 #import "Patches/ApolloWebAuthViewController.h"
+#import "SettingsController.h"
 
 static NSString *randomUserAgent = [NSString stringWithFormat:@"iOS: com.%@.%@ v%d.%d.%d (by /u/%@)", RANDSTRING, RANDSTRING, RANDINT, RANDINT, RANDINT, RANDSTRING];
 // Memo iPad6 17.5.1
