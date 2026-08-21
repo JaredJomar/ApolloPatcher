@@ -65,7 +65,7 @@ jobs:
           THEOS: ${{ github.workspace }}/theos
           THEOS_PACKAGE_SCHEME: rootless
           ARCHS: arm64
-          TARGET: iphone:16.5:15.0
+          TARGET: iphone:17.0:15.0
 
       - name: Locate built .deb
         id: locate_deb
