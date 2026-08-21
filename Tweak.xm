@@ -112,27 +112,10 @@ static const char kARCompletion = '\0';
             [queryItems addObject:[NSURLQueryItem queryItemWithName:@"scope" value:@"identity+read+vote+submit+nsfw"]];
         }
         
-        components.queryItems = queryItems;
+components.queryItems = queryItems;
         authURL = components.URL;
     }
-
-    // Prefer the full redirect_uri from the auth URL (set by our
-    // RDKOAuthCredential hook). Falls back to the callback scheme otherwise.
-    NSString *callbackScheme = objc_getAssociatedObject(self, &kARScheme);
-    NSString *interceptRedirectURI = callbackScheme.length ? [callbackScheme stringByAppendingString:@"://"] : nil;
-    for (NSURLQueryItem *item in [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO].queryItems) {
-        if ([item.name isEqualToString:@"redirect_uri"]) {
-            if (item.value.length) interceptRedirectURI = item.value;
-            break;
-        }
-    }
-
-    // Apollo's own scheme routes natively; only replace the session for custom
-    // schemes (e.g. dystopia://response) iOS can't deliver back to the app.
-    if (interceptRedirectURI.length == 0 || [interceptRedirectURI hasPrefix:@"apollo://"]) {
-        return %orig;
-    }
-
+    
     UIWindow *window = nil;
     if (@available(iOS 13.0, *)) {
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {

@@ -683,3 +683,5 @@ static NSInteger const kBackupCurrentVersion = 1;
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
+
+@end
