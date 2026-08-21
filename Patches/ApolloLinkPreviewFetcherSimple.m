@@ -79,24 +79,24 @@ static NSString *const kUserAgent = @"ApolloPatcher/0.1.1 (+https://github.com/i
 #pragma mark - Reddit API
 
 - (BOOL)isRedditUserProfileURL:(NSURL *)url {
-    NSString *host = url.host.lowercaseString ?: @"";
+    NSString *host = [url.host lowercaseString] ?: @"";
     if (![host isEqualToString:@"reddit.com"] && ![host hasSuffix:@".reddit.com"]) return NO;
     NSArray *parts = [url.path componentsSeparatedByString:@"/"];
     NSMutableArray *clean = [NSMutableArray array];
     for (NSString *p in parts) if (p.length) [clean addObject:p];
     if (clean.count < 2) return NO;
-    NSString *prefix = clean[0].lowercaseString;
+    NSString *prefix = [clean[0] lowercaseString];
     return [prefix isEqualToString:@"user"] || [prefix isEqualToString:@"u"];
 }
 
 - (BOOL)isRedditSubredditURL:(NSURL *)url {
-    NSString *host = url.host.lowercaseString ?: @"";
+    NSString *host = [url.host lowercaseString] ?: @"";
     if (![host isEqualToString:@"reddit.com"] && ![host hasSuffix:@".reddit.com"]) return NO;
     NSArray *parts = [url.path componentsSeparatedByString:@"/"];
     NSMutableArray *clean = [NSMutableArray array];
     for (NSString *p in parts) if (p.length) [clean addObject:p];
     if (clean.count < 2) return NO;
-    NSString *prefix = clean[0].lowercaseString;
+    NSString *prefix = [clean[0] lowercaseString];
     return [prefix isEqualToString:@"r"];
 }
 
@@ -114,22 +114,21 @@ static NSString *const kUserAgent = @"ApolloPatcher/0.1.1 (+https://github.com/i
         if (jsonError || !json) { completion(nil, jsonError); return; }
         NSArray *children = json[@"data"][@"children"];
         if (!children || children.count == 0) { completion(nil, nil); return; }
-        NSDictionary *data = children[0][@"data"];
-        NSString *name = data[@"name"] ?: @"";
-        NSString *title = data[@"subreddit"][@"display_name_prefixed"] ?: [@"u/" stringByAppendingString:name];
-        NSString *desc = data[@"description"] ?: @"";
-        NSString *icon = data[@"icon_img"] ?: data[@"icon_img"] ?: @"";
+        NSDictionary *dataDict = children[0][@"data"];
+        NSString *name = dataDict[@"name"] ?: @"";
+        NSString *title = dataDict[@"subreddit"][@"display_name_prefixed"] ?: [@"u/" stringByAppendingString:name];
+        NSString *desc = dataDict[@"description"] ?: @"";
+        NSString *icon = dataDict[@"icon_img"] ?: dataDict[@"icon_img"] ?: @"";
         NSURL *iconURL = [NSURL URLWithString:icon];
-        NSString *banner = data[@"banner_img"] ?: @"";
+        NSString *banner = dataDict[@"banner_img"] ?: @"";
         NSURL *bannerURL = [NSURL URLWithString:banner];
-        NSNumber *subscribers = data[@"subscribers"];
-        NSString *members = subscribers ? [NSString stringWithFormat:@"%@ members", subscribers] : @"";
+        NSNumber *subscribers = dataDict[@"subscribers"];
         ApolloLinkPreviewModelSimple *preview = [[ApolloLinkPreviewModelSimple alloc] initWithURL:url
-                                                                                              title:title
-                                                                                               desc:desc
-                                                                                           imageURL:bannerURL ?: iconURL
-                                                                                         faviconURL:iconURL
-                                                                                           siteName:[@"u/" stringByAppendingString:name]];
+                                                                                               title:title
+                                                                                                desc:desc
+                                                                                            imageURL:bannerURL ?: iconURL
+                                                                                          faviconURL:iconURL
+                                                                                            siteName:[@"u/" stringByAppendingString:name]];
         completion(preview, nil);
     }];
 }
@@ -154,13 +153,12 @@ static NSString *const kUserAgent = @"ApolloPatcher/0.1.1 (+https://github.com/i
         NSString *banner = dataDict[@"banner_background_image"] ?: dataDict[@"banner_img"] ?: @"";
         NSURL *bannerURL = [NSURL URLWithString:banner];
         NSNumber *subscribers = dataDict[@"subscribers"];
-        NSString *members = subscribers ? [NSString stringWithFormat:@"%@ members", subscribers] : @"";
         ApolloLinkPreviewModelSimple *preview = [[ApolloLinkPreviewModelSimple alloc] initWithURL:url
-                                                                                              title:title
-                                                                                               desc:desc
-                                                                                           imageURL:bannerURL ?: iconURL
-                                                                                         faviconURL:iconURL
-                                                                                           siteName:[@"r/" stringByAppendingString:subreddit]];
+                                                                                               title:title
+                                                                                                desc:desc
+                                                                                            imageURL:bannerURL ?: iconURL
+                                                                                          faviconURL:iconURL
+                                                                                            siteName:[@"r/" stringByAppendingString:subreddit]];
         completion(preview, nil);
     }];
 }
@@ -189,15 +187,15 @@ static NSString *const kUserAgent = @"ApolloPatcher/0.1.1 (+https://github.com/i
 
         NSURL *imageURL = image ? [NSURL URLWithString:image] : nil;
         NSURL *faviconURL = favicon ? [NSURL URLWithString:favicon] : nil;
-        if (imageURL && !imageURL.scheme) imageURL = [NSURL URLWithString:imageURL absoluteString]; // relative
-        if (faviconURL && !faviconURL.scheme) faviconURL = [NSURL URLWithString:faviconURL absoluteString];
+        if (imageURL && !imageURL.scheme) imageURL = [NSURL URLWithString:[imageURL absoluteString]]; // relative
+        if (faviconURL && !faviconURL.scheme) faviconURL = [NSURL URLWithString:[faviconURL absoluteString]];
 
         ApolloLinkPreviewModelSimple *preview = [[ApolloLinkPreviewModelSimple alloc] initWithURL:url
-                                                                                              title:title ?: @""
-                                                                                               desc:desc ?: @""
-                                                                                           imageURL:imageURL
-                                                                                         faviconURL:faviconURL
-                                                                                           siteName:siteName ?: @""];
+                                                                                               title:title ?: @""
+                                                                                                desc:desc ?: @""
+                                                                                            imageURL:imageURL
+                                                                                          faviconURL:faviconURL
+                                                                                            siteName:siteName ?: @""];
         completion(preview, nil);
     }];
 }

@@ -9,8 +9,8 @@ typedef void (^ApolloLinkPreviewFetchCompletion)(ApolloLinkPreviewModelSimple * 
 
 @interface ApolloLinkPreviewFetcherSimple : NSObject
 
-+ (instancetype)sharedFetcher;
++ (instancetype _Nonnull)sharedFetcher;
 
-- (void)fetchPreviewForURL:(NSURL *)url completion:(ApolloLinkPreviewFetchCompletion)completion;
+- (void)fetchPreviewForURL:(NSURL * _Nonnull)url completion:(ApolloLinkPreviewFetchCompletion _Nullable)completion;
 
 @end
