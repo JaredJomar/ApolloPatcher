@@ -85,11 +85,11 @@ static const NSTimeInterval kNegativeTTL = 24.0 * 60.0 * 60.0;        // 1 day
     if (![url isKindOfClass:[NSURL class]]) return nil;
     NSString *key = [self cacheKeyForURL:url];
 
-    ApolloLinkPreviewModelSimple *preview = [self.memoryCache objectForKey:url.absoluteString];
+    ApolloLinkPreviewModelSimple *preview = [self.memoryCache objectForKey:key];
     if (preview && [self isFresh:preview forURL:url]) return preview;
 
-    if ([self.missCache objectForKey:url.absoluteString]) return nil;
-    [self.missCache setObject:@YES forKey:url.absoluteString];
+    if ([self.missCache objectForKey:key]) return nil;
+    [self.missCache setObject:@YES forKey:key];
     return nil;
 }
 
