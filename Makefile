@@ -20,7 +20,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = ApolloPatcher
 
-$(TWEAK_NAME)_FILES = Tweak.xm SettingsController.m Patches/ApolloVideoHoldSpeed.xm Patches/ApolloWebAuthViewController.m Patches/ApolloVideoPlaybackSpeed.xm Patches/ApolloVideoUnmute.xm fishhook.c
+$(TWEAK_NAME)_FILES = Tweak.xm Patches/ApolloVideoHoldSpeed.xm Patches/ApolloWebAuthViewController.m Patches/ApolloVideoPlaybackSpeed.xm Patches/ApolloVideoUnmute.xm fishhook.c
 $(TWEAK_NAME)_FRAMEWORKS = UIKit SafariServices AVFoundation
 $(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 
