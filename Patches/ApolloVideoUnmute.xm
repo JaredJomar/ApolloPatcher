@@ -5,10 +5,12 @@
 
 #import "header.h"
 
-// Upstream routes logs through os_log (iOS 26 redaction workaround); here
-// NSLog suffices — header.h re-macros it with the ApolloPatcher prefix.
-#define ApolloLog(fmt, ...) NSLog((@"[VideoUnmute] " fmt), ##__VA_ARGS__)
-#define ApolloLogDebug(fmt, ...) NSLog((@"[VideoUnmute] " fmt), ##__VA_ARGS__)
+// Upstream routes logs through os_log; its call sites already embed the
+// "[VideoUnmute] " tag in each literal, so pass straight through to the
+// NSLog macro (header.h adds the ApolloPatcher prefix). No extra parens:
+// the NSLog macro's fmt parameter must bind to a bare literal to concatenate.
+#define ApolloLog(fmt, ...) NSLog(fmt, ##__VA_ARGS__)
+#define ApolloLogDebug(fmt, ...) NSLog(fmt, ##__VA_ARGS__)
 
 // =============================================================================
 // MARK: - Overview
