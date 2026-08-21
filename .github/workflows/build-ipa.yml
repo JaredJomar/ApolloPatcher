@@ -51,6 +51,9 @@ jobs:
       - name: Add GNU make to PATH
         run: echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
 
+      - name: List available iOS SDKs
+        run: ls -la /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/
+
       - name: Setup Theos
         uses: actions/checkout@v4
         with:
