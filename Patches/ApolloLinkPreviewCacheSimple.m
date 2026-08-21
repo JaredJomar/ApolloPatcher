@@ -12,7 +12,6 @@ static const NSUInteger kMaxEntries = 500;
 static const NSTimeInterval kDefaultTTL = 7.0 * 24.0 * 60.0 * 60.0;   // 7 days
 static const NSTimeInterval kRedditTTL = 24.0 * 60.0 * 60.0;          // 1 day
 static const NSTimeInterval kYouTubeTTL = 30.0 * 24.0 * 60.0 * 60.0;  // 30 days
-static const NSTimeInterval kNegativeTTL = 24.0 * 60.0 * 60.0;        // 1 day
 
 @interface ApolloLinkPreviewCacheSimple ()
 

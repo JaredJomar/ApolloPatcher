@@ -1,9 +1,11 @@
 #import "header.h"
 #import "fishhook.h"
+#import "Patches/ApolloWebAuthViewController.h"
 
 static NSString *randomUserAgent = [NSString stringWithFormat:@"iOS: com.%@.%@ v%d.%d.%d (by /u/%@)", RANDSTRING, RANDSTRING, RANDINT, RANDINT, RANDINT, RANDSTRING];
 // Memo iPad6 17.5.1
 // Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15
+static NSString *const safariUserAgent = @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15";
 %group CustomID
 %hook RDKOAuthCredential
 // reddit client id
@@ -13,13 +15,110 @@ static NSString *randomUserAgent = [NSString stringWithFormat:@"iOS: com.%@.%@ v
     }
     return %orig;
 }
+// custom redirect URI (Dystopia default) so OAuth completes against the configured app
+- (NSURL *)redirectURI {
+    if (kRedirectURI.length > 0) {
+        NSURL *url = [NSURL URLWithString:kRedirectURI];
+        if (url) {
+            return url;
+        }
+    }
+    return %orig;
+}
 %end
 
 %hook RDKClient
-// Randomize User-Agent
+// Configured User-Agent (Dystopia default) or randomized
 - (id)userAgent {
+    if (kUserAgent.length > 0) {
+        return kUserAgent;
+    }
     return randomUserAgent;
 }
+%end
+
+%group CustomOAuth
+
+static const char kARScheme     = '\0';
+static const char kARAuthURL    = '\0';
+static const char kARCompletion = '\0';
+
+// Replace ASWebAuthenticationSession with a WKWebView-based flow when the
+// configured redirect URI scheme (e.g. dystopia://response) isn't registered in
+// Apollo's CFBundleURLTypes, so the native session couldn't route the callback
+// back to the app. WKNavigationDelegate fires for every URL before iOS routing,
+// so the callback can be intercepted regardless of the scheme.
+%hook ASWebAuthenticationSession
+
+- (instancetype)initWithURL:(NSURL *)URL
+        callbackURLScheme:(NSString *)callbackURLScheme
+        completionHandler:(void (^)(NSURL *, NSError *))completionHandler {
+    id result = %orig(URL, callbackURLScheme, completionHandler);
+    id target = result ?: self;
+    objc_setAssociatedObject(target, &kARScheme,     callbackURLScheme, OBJC_ASSOCIATION_COPY);
+    objc_setAssociatedObject(target, &kARAuthURL,    URL,               OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(target, &kARCompletion, completionHandler, OBJC_ASSOCIATION_COPY);
+    return result;
+}
+
+- (BOOL)start {
+    NSURL *authURL = objc_getAssociatedObject(self, &kARAuthURL);
+    void (^completion)(NSURL *, NSError *) = objc_getAssociatedObject(self, &kARCompletion);
+    if (!authURL || !completion) {
+        return %orig;
+    }
+
+    // Prefer the full redirect_uri from the auth URL (set by our
+    // RDKOAuthCredential hook). Falls back to the callback scheme otherwise.
+    NSString *callbackScheme = objc_getAssociatedObject(self, &kARScheme);
+    NSString *interceptRedirectURI = callbackScheme.length ? [callbackScheme stringByAppendingString:@"://"] : nil;
+    for (NSURLQueryItem *item in [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO].queryItems) {
+        if ([item.name isEqualToString:@"redirect_uri"]) {
+            if (item.value.length) interceptRedirectURI = item.value;
+            break;
+        }
+    }
+
+    // Apollo's own scheme routes natively; only replace the session for custom
+    // schemes (e.g. dystopia://response) iOS can't deliver back to the app.
+    if (interceptRedirectURI.length == 0 || [interceptRedirectURI hasPrefix:@"apollo://"]) {
+        return %orig;
+    }
+
+    UIWindow *window = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive
+                    && [scene isKindOfClass:[UIWindowScene class]]) {
+                NSArray<UIWindow *> *sceneWindows = ((UIWindowScene *)scene).windows;
+                for (UIWindow *candidate in sceneWindows) {
+                    if (candidate.isKeyWindow) { window = candidate; break; }
+                }
+                window = window ?: sceneWindows.firstObject;
+                if (window) break;
+            }
+        }
+    }
+    window = window ?: [UIApplication sharedApplication].keyWindow;
+    if (!window) {
+        return %orig;
+    }
+
+    NSLog(@"ApolloPatcher:[WebAuth] using WKWebView, intercepting redirectURI=%@", interceptRedirectURI);
+
+    ApolloWebAuthViewController *authVC = [[ApolloWebAuthViewController alloc]
+        initWithURL:authURL redirectURI:interceptRedirectURI completionHandler:completion];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:authVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+
+    UIViewController *top = window.rootViewController;
+    while (top.presentedViewController) top = top.presentedViewController;
+    [top presentViewController:nav animated:YES completion:nil];
+
+    return YES;
+}
+
+%end
 %end
 
 @interface NSURLSession (Private)
@@ -202,9 +301,14 @@ static NSString *imageID;
         [self setValue:mutableRequest forKey:@"_originalRequest"];
         [self setValue:mutableRequest forKey:@"_currentRequest"];
     } else if ([requestURL containsString:@"https://oauth.reddit.com/"] || [requestURL containsString:@"https://www.reddit.com/"]) {
-        // reddit has blocked this user agent so will change it to a randomized one
+        // reddit has blocked the stock user agent; use the configured one (Dystopia default) or a randomized fallback
         // iOS: com.christianselig.Apollo v1.15.11 (by /u/iamthatis)
-        [mutableRequest setValue:randomUserAgent forHTTPHeaderField:@"User-Agent"];
+        [mutableRequest setValue:(kUserAgent.length > 0 ? kUserAgent : randomUserAgent) forHTTPHeaderField:@"User-Agent"];
+        [self setValue:mutableRequest forKey:@"_originalRequest"];
+        [self setValue:mutableRequest forKey:@"_currentRequest"];
+    } else if ([requestURL containsString:@"redgifs.com"]) {
+        // RedGifs blocks non-browser user agents and serves silent video
+        [mutableRequest setValue:safariUserAgent forHTTPHeaderField:@"User-Agent"];
         [self setValue:mutableRequest forKey:@"_originalRequest"];
         [self setValue:mutableRequest forKey:@"_currentRequest"];
     }
@@ -593,11 +697,14 @@ static OSStatus SecItemUpdate_replacement(CFDictionaryRef query, CFDictionaryRef
     @autoreleasepool {
         kCustomID = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"Custom_ID"] ?: nil copy];
         kClientID = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"IMGUR_ID"] ?: @"8b15a972041abb1" copy];
+        kRedirectURI = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"REDIRECT_URI"] ?: @"dystopia://response" copy];
+        kUserAgent = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"USER_AGENT"] ?: @"ios:com.CarbonDev.Dystopia:v1.0.1(by /u/DystopiaForReddit)" copy];
         // Suppress wallpaper prompt
         NSDate *dateIn90d = [NSDate dateWithTimeIntervalSinceNow:60*60*24*90];
         [[NSUserDefaults standardUserDefaults] setObject:dateIn90d forKey:@"WallpaperPromptMostRecent2"];
 
         %init(CustomID);
+        %init(CustomOAuth, ASWebAuthenticationSession = objc_getClass("ASWebAuthenticationSession"));
 
         %init(SettingsViewController, ApolloSettingsViewController = objc_getClass("Apollo.SettingsViewController"));
         // Add support for share links (e.g. reddit.com/r/subreddit/s/xxxxxx) in Apollo.

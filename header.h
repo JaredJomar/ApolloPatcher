@@ -12,6 +12,8 @@
 
 static NSString *kCustomID;
 static NSString *kClientID;
+static NSString *kRedirectURI;
+static NSString *kUserAgent;
 
 @interface ShareUrlTask : NSObject
 @property (nonatomic) dispatch_group_t dispatchGroup;
@@ -29,7 +31,7 @@ static UIAlertController *alertController;
 @protocol SFSafariViewControllerDelegate;
 @import SafariServices;
 
-@interface SettingsController : PSListController <SFSafariViewControllerDelegate>
+@interface SettingsController : PSListController <SFSafariViewControllerDelegate, UIDocumentPickerDelegate>
 @property (nonatomic, strong) id <SFSafariViewControllerDelegate> delegate;
 @end
 
