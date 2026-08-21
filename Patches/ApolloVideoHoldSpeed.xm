@@ -1,88 +1,88 @@
 // ApolloVideoHoldSpeed.xm
 //
-// "Hold for 2×" — press-and-hold the RIGHT third of the fullscreen video to
-// play it at 2× speed while held; release to restore the previous rate.
+// "Hold for Video Speed" — press-and-hold the RIGHT third of the fullscreen video
+// to play it at a chosen speed while held; release to restore the previous rate.
 //
-// Ported from Apollo-Reborn PR #479 (icpryde, "Add hold-to-2× video speed
-// gesture", June 2026), adapted to this project's conventions: iOS 10+
-// deployment target, ARC, %group/%init pattern, NSLog macro from header.h.
+// Settings keys (ApolloPatcher):
+//   HOLD_SPEED_ENABLED  (BOOL, default YES)  master toggle
+//   HOLD_SPEED          (float, default 2.0) speed applied while held
+// Both are read once per launch; changes apply after an app restart.
 //
-// The fullscreen player is `MediaViewerController` (ObjC name
-// `_TtC6Apollo21MediaViewerController`). A long-press anywhere on it normally
-// brings up the Share Link / Download Video / Playback Speed context menu
-// (driven by one of several UILongPressGestureRecognizers in its view tree).
+// Coexists with Apollo's long-press context menu:
 //
-// We must coexist with that menu, not replace it:
+//     +--------------------------+------------+
+//     |     left + center 2/3    |   right 1/3 |
+//     |   normal long-press menu |  speed hold |
+//     +--------------------------+------------+
 //
-//     ┌──────────────────────────┬──────────┐
-//     │     left + center 2/3    │  right ⅓ │
-//     │   normal long-press menu │  2× hold │
-//     └──────────────────────────┴──────────┘
+// Uses a custom passive recognizer (never leaves .possible) so UIKit gesture
+// arbitration can't kill it and it never blocks Apollo's own tap/pan handling.
+// Context-menu interactions under the finger are removed on right-zone touch-down
+// and restored on release, so the menu simply cannot appear for that press.
 //
-// Why a custom passive recognizer (not a UILongPressGestureRecognizer):
-//   A second long-press recognizer competing with Apollo's loses UIKit's gesture
-//   arbitration — it reaches the "should begin?" point but is then failed by the
-//   menu recognizer before it commits to .began, so its action never fires
-//   (verified in the logs). Instead we attach a custom UIGestureRecognizer that
-//   never "recognizes" — it stays in .possible and just observes raw touches, so
-//   arbitration can't kill it and it never blocks Apollo's own tap/pan handling.
-//
-// Mechanics:
-//   • On touch-DOWN we check, against the video's live on-screen geometry, whether
-//     the touch is in the right third. If so we immediately DISABLE every other
-//     long-press recognizer in the tree — so the menu simply can't appear for this
-//     touch — and re-enable them on release. (No timing race with the menu.)
-//   • If the press is still held after a short delay, we capture the live rate,
-//     force 2×, and show a "2× ⏵⏵" overlay. On release we restore the captured
-//     rate and hide the overlay. A quick tap in the right zone just toggles the
-//     menu recognizers off/on with no speed change.
-//   • Left/center touches are left entirely alone, so the normal menu still works.
-//   • We never touch `videoPlaybackSpeed` (Apollo's persistent menu choice), so
-//     the speed menu's checkmark stays correct.
-//
-// Orientation: the right-third test projects the touch onto the video's displayed
-// left→right axis, so it stays correct when Apollo transform-rotates the content
-// to landscape on the portrait-locked screen, and under pinch-zoom.
-//
-// Interplay with Apollo's press-drag SCRUB gesture (the sticky-2× bug):
-//   Apollo scrubs video via a pan recognizer whose action is
-//   -[MediaViewerController scrollViewScrubbed:]. On .began it snapshots
-//   `player.rate` into an `initialRate` ivar and pauses; on .ended it resumes
-//   with that captured rate. If a hold was engaged when the scrub began, that
-//   snapshot captured OUR boosted rate — so after the finger lifted, Apollo
-//   re-applied 2× over our restore and the video stayed fast forever. Fix, two
-//   sides of the same coin:
-//     • scrollViewScrubbed: .began → release an engaged hold BEFORE %orig, so
-//       Apollo's snapshot sees the clean pre-hold rate. Scrubbing always wins
-//       over the hold — dragging means the user wants to scrub, not speed up.
-//     • While a scrub is in flight (.began→.ended), never engage a new hold: a
-//       quick sub-tolerance drag can start the pan without cancelling our
-//       pending hold, and engaging mid-scrub would capture preHoldRate == 0
-//       (the scrub's pause) and fight the seek.
+// Scrub interplay: Apollo's scrollViewScrubbed: snapshots player.rate into its
+// initialRate ivar on .began and resumes with playImmediatelyAtRate: on end.
+// An engaged hold is released BEFORE %orig on scrub-begin so the snapshot sees
+// the clean pre-hold rate; while a scrub is in flight new holds never engage.
 
-#import "header.h"
-#import <AVFoundation/AVFoundation.h>
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import <UIKit/UIGestureRecognizerSubclass.h>
+#import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 
-// Rightmost fraction of the video that activates hold-to-2×.
+#import "header.h"
+
+// Upstream routes logs through os_log; call sites already embed the
+// "VideoHoldSpeed:" tag — pass straight through to the NSLog macro.
+#define ApolloLog(fmt, ...) NSLog(fmt, ##__VA_ARGS__)
+#define ApolloLogDebug(fmt, ...) NSLog(fmt, ##__VA_ARGS__)
+
+// =============================================================================
+// Settings state (ApolloPatcher keys; read once per launch in %ctor)
+// =============================================================================
+
+static BOOL sVideoHoldSpeedEnabled = YES;
+static float sVideoHoldSpeed = 2.0f;
+
+// Our settings UI allows any value in 0.5-4.0; guard against junk regardless.
+static float ApolloSanitizedHoldSpeed(float value) {
+    if (!(value >= 0.25f && value <= 4.0f)) return 2.0f;
+    return value;
+}
+
+// Rightmost fraction of the video that activates hold-to-speed.
 static const CGFloat kRightZoneFraction = 1.0 / 3.0;
 
-// The speed applied while held (default 2.0x, configurable via HOLD_SPEED pref).
-static float kHoldSpeed = 2.0f;
-
-// How long the press must be held before 2× engages. Short enough to feel
-// instant, long enough that a quick tap never trips it. (This only gates the
-// speed change — the menu is suppressed at touch-down, so there's no race.)
+// How long the press must be held before the speed engages.
 static const NSTimeInterval kHoldActivationDelay = 0.18;
 
 // Movement (in points) that cancels a pending hold, so a drag becomes a normal
 // scrub / swipe-to-dismiss instead of a speed-up.
 static const CGFloat kHoldMoveTolerance = 12.0;
 
-// Key for hold speed preference.
-static NSString *const kHoldSpeedKey = @"HOLD_SPEED";
+static const UIImpactFeedbackStyle kHoldHapticStyle = UIImpactFeedbackStyleMedium;
+
+// Top-center overlay text for the engaged speed, e.g. "2x >>". Fast-forward
+// chevrons only when boosting; bare multiplier for slow-motion speeds.
+static NSAttributedString *HoldOverlayText(float speed) {
+    NSString *num;
+    if (fabsf(speed - 0.25f) < 0.001f)      num = @"0.25";
+    else if (fabsf(speed - 0.5f)  < 0.001f) num = @"0.5";
+    else if (fabsf(speed - 0.75f) < 0.001f) num = @"0.75";
+    else if (fabsf(speed - 1.25f) < 0.001f) num = @"1.25";
+    else if (fabsf(speed - 1.5f)  < 0.001f) num = @"1.5";
+    else if (fabsf(speed - 2.0f)  < 0.001f) num = @"2";
+    else                                    num = [NSString stringWithFormat:@"%g", speed];
+    NSString *s = (speed > 1.0f)
+        ? [NSString stringWithFormat:@"%@%C \u23E5\u23E5", num, (unichar)0x00D7]
+        : [NSString stringWithFormat:@"%@%C", num, (unichar)0x00D7];
+    return [[NSAttributedString alloc] initWithString:s attributes:@{
+        NSFontAttributeName: [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold],
+        NSForegroundColorAttributeName: [UIColor whiteColor],
+    }];
+}
 
 #pragma mark - Player access
 
@@ -119,9 +119,8 @@ static AVPlayer *PlayerFromView(UIView *view) {
 }
 
 // MediaViewerController stores its AVPlayer two ways: directly on the `player`
-// ivar for non-shareable videos (GIFs/Streamable), or — for shareable v.redd.it
-// videos — on the `playerLayerContainerView`'s AVPlayerLayer (the `player` ivar
-// is nil). Mirror Apollo's own lookup, with a view-tree scan as a last resort.
+// ivar for non-shareable videos, or on the `playerLayerContainerView`'s
+// AVPlayerLayer for shareable v.redd.it videos (`player` ivar nil).
 static AVPlayer *MediaViewerPlayer(UIViewController *mvc) {
     if (!mvc) return nil;
 
@@ -143,13 +142,9 @@ static AVPlayer *MediaViewerPlayer(UIViewController *mvc) {
     return PlayerFromView(mvc.isViewLoaded ? mvc.view : nil);
 }
 
-// The view whose bounds the video fills. In fullscreen this is the view Apollo
-// rotates (via a transform) to show landscape video on the portrait-locked
-// screen, so its on-screen geometry tells us where the video's edges actually
-// are in the CURRENT orientation. Used for orientation-correct zone detection.
 static BOOL LayerHostsPlayer(CALayer *layer) {
     if ([layer isKindOfClass:[AVPlayerLayer class]]) return YES;
-    for (CALayer *s in layer.sublayers) {     // shallow: immediate sublayers only
+    for (CALayer *s in layer.sublayers) {
         if ([s isKindOfClass:[AVPlayerLayer class]]) return YES;
     }
     return NO;
@@ -176,11 +171,7 @@ static UIView *MediaVideoView(UIViewController *mvc) {
 }
 
 // Collect every UIContextMenuInteraction in a view subtree, with the view that
-// owns each (a UIInteraction's `view` is nilled once removed, so we must capture
-// it up front to re-add later). The Share/Download/Speed menu is driven by one
-// of these; removing it for the duration of a right-zone hold is what suppresses
-// the menu — its internal trigger isn't a plain UILongPressGestureRecognizer, so
-// disabling recognizers by class doesn't reach it.
+// owns each (a UIInteraction's `view` is nilled once removed, so capture up front).
 static void CollectContextMenuInteractions(UIView *view,
                                            NSMutableArray<UIView *> *outViews,
                                            NSMutableArray<UIContextMenuInteraction *> *outInteractions) {
@@ -198,9 +189,6 @@ static void CollectContextMenuInteractions(UIView *view,
 
 #pragma mark - Passive touch recognizer
 
-// A gesture recognizer that never recognizes — it stays in .possible and only
-// reports the raw touch lifecycle, so UIKit's gesture arbitration never fails it
-// and it never blocks Apollo's own recognizers.
 @interface ApolloHoldTouchRecognizer : UIGestureRecognizer
 @property (nonatomic, copy) void (^onTouchDown)(CGPoint windowPoint);
 @property (nonatomic, copy) void (^onHoldElapsed)(CGPoint windowPoint);
@@ -208,10 +196,10 @@ static void CollectContextMenuInteractions(UIView *view,
 @end
 
 @implementation ApolloHoldTouchRecognizer {
-    BOOL _armed;          // tracking a single touch
-    BOOL _holdFired;      // hold threshold already reached
+    BOOL _armed;
+    BOOL _holdFired;
     CGPoint _startWindow;
-    NSInteger _generation; // invalidates a pending delayed hold
+    NSInteger _generation;
 }
 
 - (void)scheduleHold {
@@ -229,20 +217,20 @@ static void CollectContextMenuInteractions(UIView *view,
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     [super touchesBegan:touches withEvent:event];
-    if (_armed) return;                        // ignore extra fingers
+    if (_armed) return;
     _armed = YES;
     _holdFired = NO;
-    _startWindow = [touches.anyObject locationInView:nil];   // window coordinates
+    _startWindow = [touches.anyObject locationInView:nil];
     if (self.onTouchDown) self.onTouchDown(_startWindow);
     [self scheduleHold];
 }
 
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     [super touchesMoved:touches withEvent:event];
-    if (!_armed || _holdFired) return;          // after engage, ignore drift
+    if (!_armed || _holdFired) return;
     CGPoint p = [touches.anyObject locationInView:nil];
     if (hypot(p.x - _startWindow.x, p.y - _startWindow.y) > kHoldMoveTolerance) {
-        _generation++;                          // cancel the pending hold
+        _generation++;
     }
 }
 
@@ -277,18 +265,17 @@ static void CollectContextMenuInteractions(UIView *view,
 @property (nonatomic, weak) UIViewController *mediaViewer;
 @property (nonatomic, strong) ApolloHoldTouchRecognizer *recognizer;
 @property (nonatomic, strong) UIView *overlayView;
-// Apollo's context-menu interaction(s), removed while a right-zone touch is down
-// and re-added on release. Parallel arrays (interaction + the view it belongs to).
+@property (nonatomic, strong) UILabel *overlayLabel;
+@property (nonatomic, assign) float engagedHoldSpeed;
 @property (nonatomic, strong) NSArray<UIContextMenuInteraction *> *suppressedInteractions;
 @property (nonatomic, strong) NSArray<UIView *> *suppressedInteractionViews;
-@property (nonatomic, assign) BOOL inZone;     // current touch began in the right third
-@property (nonatomic, assign) BOOL active;     // 2× currently engaged
-@property (nonatomic, assign) BOOL scrubbing;  // Apollo's scrub gesture is in flight
+@property (nonatomic, assign) BOOL inZone;
+@property (nonatomic, assign) BOOL active;
+@property (nonatomic, assign) BOOL scrubbing;
 @property (nonatomic, assign) float preHoldRate;
-// The exact AVPlayer we sped up, held strongly so we restore *that* instance on
-// release — not one re-resolved from the (possibly torn-down) media viewer. For
-// shared v.redd.it players, re-resolving could miss the restore and leave the
-// feed/comments copy stuck at 2×.
+@property (nonatomic, strong) UIImpactFeedbackGenerator *hapticGenerator;
+// Held strongly so release restores THIS exact instance even if the media viewer
+// is torn down mid-hold.
 @property (nonatomic, strong) AVPlayer *engagedPlayer;
 - (void)installOnView:(UIView *)view;
 - (void)releaseHoldWithReason:(NSString *)reason;
@@ -311,7 +298,7 @@ static void CollectContextMenuInteractions(UIView *view,
 
     [view addGestureRecognizer:gr];
     self.recognizer = gr;
-    NSLog(@"VideoHoldSpeed: installed on %@", NSStringFromClass([view class]));
+    ApolloLog(@"VideoHoldSpeed: installed on %@", NSStringFromClass([view class]));
 }
 
 #pragma mark Menu suppression
@@ -326,7 +313,7 @@ static void CollectContextMenuInteractions(UIView *view,
     }
     self.suppressedInteractionViews = views;
     self.suppressedInteractions = interactions;
-    NSLog(@"VideoHoldSpeed: removed %lu context-menu interaction(s)", (unsigned long)interactions.count);
+    ApolloLog(@"VideoHoldSpeed: removed %lu context-menu interaction(s)", (unsigned long)interactions.count);
 }
 
 - (void)restoreMenu {
@@ -341,10 +328,8 @@ static void CollectContextMenuInteractions(UIView *view,
 
 #pragma mark Zone detection
 
-// True when `windowPoint` is in the right third of the VIDEO as currently
-// displayed, in any orientation. Projects the touch onto the video's on-screen
-// left→right axis (between the video view's left- and right-edge midpoints in
-// window space), so it follows the video's real geometry under rotation/zoom.
+// True when windowPoint is in the right third of the VIDEO as displayed, in any
+// orientation. Projects onto the video's on-screen left-to-right axis.
 - (BOOL)pointInActivationZone:(CGPoint)windowPoint {
     if (!MediaViewerPlayer(self.mediaViewer)) return NO;
 
@@ -369,29 +354,37 @@ static void CollectContextMenuInteractions(UIView *view,
 #pragma mark Touch lifecycle
 
 - (void)touchDownAt:(CGPoint)windowPoint {
+    if (!sVideoHoldSpeedEnabled) { self.inZone = NO; return; }
     self.inZone = [self pointInActivationZone:windowPoint];
-    // Remove the context-menu interaction the instant a right-zone touch lands, so
-    // the menu can never appear for this press. Left/center is left alone → normal
-    // menu. Restored on release.
-    if (self.inZone) [self suppressMenu];
+    if (self.inZone) {
+        [self suppressMenu];
+        if (!self.hapticGenerator) {
+            self.hapticGenerator = [[UIImpactFeedbackGenerator alloc] initWithStyle:kHoldHapticStyle];
+        }
+        [self.hapticGenerator prepare];
+    }
 }
 
 - (void)holdElapsedAt:(CGPoint)windowPoint {
     if (!self.inZone || self.active) return;
-    // Never engage while Apollo is scrubbing: the scrub paused the player
-    // (rate 0), so we'd capture preHoldRate=0 and un-pause mid-seek. A fast
-    // drag under kHoldMoveTolerance can start the scrub pan without cancelling
-    // the pending hold, so this gate is reachable.
-    if (self.scrubbing) { NSLog(@"VideoHoldSpeed: engage skipped — scrub in progress"); return; }
+    if (self.scrubbing) { ApolloLog(@"VideoHoldSpeed: engage skipped — scrub in progress"); return; }
     AVPlayer *player = MediaViewerPlayer(self.mediaViewer);
-    if (!player) { NSLog(@"VideoHoldSpeed: holdElapsed — no player"); return; }
+    if (!player) { ApolloLog(@"VideoHoldSpeed: holdElapsed — no player"); return; }
 
-    self.engagedPlayer = player;      // restore THIS exact instance on release
-    self.preHoldRate = player.rate;   // 0 if paused, 1.0, or a custom menu speed
+    float holdSpeed = ApolloSanitizedHoldSpeed(sVideoHoldSpeed);
+    self.engagedHoldSpeed = holdSpeed;
+    self.engagedPlayer = player;
+    self.preHoldRate = player.rate;
     self.active = YES;
-    [player setRate:kHoldSpeed];
+    [player setRate:holdSpeed];
     [self showOverlay];
-    NSLog(@"VideoHoldSpeed: engaged 2x (prevRate=%.2f)", self.preHoldRate);
+
+    if (!self.hapticGenerator) {
+        self.hapticGenerator = [[UIImpactFeedbackGenerator alloc] initWithStyle:kHoldHapticStyle];
+    }
+    [self.hapticGenerator impactOccurred];
+
+    ApolloLog(@"VideoHoldSpeed: engaged %.2fx (prevRate=%.2f)", holdSpeed, self.preHoldRate);
 }
 
 - (void)touchUp {
@@ -400,26 +393,15 @@ static void CollectContextMenuInteractions(UIView *view,
     [self releaseHoldWithReason:@"touch-up"];
 }
 
-// Restore the boosted player and drop the hold. Shared by the normal touch-up
-// path and the scrub-begin hook (which must restore BEFORE Apollo snapshots
-// the rate it will resume with after the scrub).
 - (void)releaseHoldWithReason:(NSString *)reason {
     if (!self.active) return;
     self.active = NO;
-    // Restore the SAME player we sped up — not one re-resolved from the media
-    // viewer, which may be a different instance (compact posts spin up a fresh
-    // comments player) or nil (a swipe-to-dismiss while holding can tear down the
-    // weak mediaViewer before the finger lifts). Missing the restore on a shared
-    // v.redd.it player would leave the feed/comments copy stuck at 2×.
     [self.engagedPlayer setRate:self.preHoldRate];
     self.engagedPlayer = nil;
     [self hideOverlay];
-    NSLog(@"VideoHoldSpeed: released via %@ (restored rate=%.2f)", reason, self.preHoldRate);
+    ApolloLog(@"VideoHoldSpeed: released via %@ (restored rate=%.2f)", reason, self.preHoldRate);
 }
 
-// Safety net: if the handler is deallocated mid-hold (e.g. the media viewer is
-// torn down by a flick-dismiss before the touch ends, so -touchUp never fires),
-// still reset the player we sped up. engagedPlayer is strong, so it's alive here.
 - (void)dealloc {
     if (self.active && self.engagedPlayer) {
         [self.engagedPlayer setRate:self.preHoldRate];
@@ -433,26 +415,14 @@ static void CollectContextMenuInteractions(UIView *view,
     if (!host) return;
 
     if (!self.overlayView) {
-        // UIBlurEffectStyleDark works on every iOS version we target; the newer
-        // material styles are iOS 13+ only.
         UIVisualEffectView *blur = [[UIVisualEffectView alloc]
-            initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+            initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
         blur.layer.cornerRadius = 16.0;
-        if ([blur.layer respondsToSelector:@selector(setCornerCurve:)]) {
-            [blur.layer setValue:@"continuous" forKey:@"cornerCurve"];
-        }
+        blur.layer.cornerCurve = kCACornerCurveContinuous;
         blur.clipsToBounds = YES;
         blur.userInteractionEnabled = NO;
 
         UILabel *label = [[UILabel alloc] init];
-        // "2× ⏵⏵" — U+00D7 multiplication sign, U+23F5 double right-pointing.
-        label.attributedText = ({
-            NSString *s = [NSString stringWithFormat:@"2%C ⏵⏵", (unichar)0x00D7];
-            [[NSAttributedString alloc] initWithString:s attributes:@{
-                NSFontAttributeName: [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold],
-                NSForegroundColorAttributeName: [UIColor whiteColor],
-            }];
-        });
         label.translatesAutoresizingMaskIntoConstraints = NO;
         [blur.contentView addSubview:label];
         [NSLayoutConstraint activateConstraints:@[
@@ -461,21 +431,20 @@ static void CollectContextMenuInteractions(UIView *view,
             [label.topAnchor constraintEqualToAnchor:blur.contentView.topAnchor constant:8.0],
             [label.bottomAnchor constraintEqualToAnchor:blur.contentView.bottomAnchor constant:-8.0],
         ]];
+        self.overlayLabel = label;
         self.overlayView = blur;
     }
+
+    self.overlayLabel.attributedText = HoldOverlayText(self.engagedHoldSpeed);
 
     UIView *overlay = self.overlayView;
     if (overlay.superview != host) {
         [overlay removeFromSuperview];
         overlay.translatesAutoresizingMaskIntoConstraints = NO;
         [host addSubview:overlay];
-        NSLayoutYAxisAnchor *topAnchor = host.topAnchor;
-        if ([host respondsToSelector:@selector(safeAreaLayoutGuide)]) {
-            topAnchor = host.safeAreaLayoutGuide.topAnchor;
-        }
         [NSLayoutConstraint activateConstraints:@[
             [overlay.centerXAnchor constraintEqualToAnchor:host.centerXAnchor],
-            [overlay.topAnchor constraintEqualToAnchor:topAnchor constant:24.0],
+            [overlay.topAnchor constraintEqualToAnchor:host.safeAreaLayoutGuide.topAnchor constant:24.0],
         ]];
     }
     [host bringSubviewToFront:overlay];
@@ -498,21 +467,16 @@ static char kHoldSpeedHandlerKey;
 static void InstallHoldSpeed(UIViewController *mvc) {
     if (!mvc) return;
     ApolloHoldSpeedHandler *existing = objc_getAssociatedObject(mvc, &kHoldSpeedHandlerKey);
-    if (existing.recognizer) return;   // already installed
+    if (existing.recognizer) return;
 
-    // Attach to the controller's root view (stable, never transform-rotated) so
-    // we receive touches anywhere on screen; the activation zone is computed
-    // against the video's live on-screen geometry, so it's orientation-correct.
     UIView *targetView = mvc.isViewLoaded ? mvc.view : nil;
-    if (!targetView) return;   // not ready; a later layout pass retries
+    if (!targetView) return;
 
     ApolloHoldSpeedHandler *handler = existing ?: [[ApolloHoldSpeedHandler alloc] init];
     handler.mediaViewer = mvc;
     objc_setAssociatedObject(mvc, &kHoldSpeedHandlerKey, handler, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [handler installOnView:targetView];
 }
-
-%group VideoHoldSpeed
 
 %hook _TtC6Apollo21MediaViewerController
 
@@ -523,15 +487,9 @@ static void InstallHoldSpeed(UIViewController *mvc) {
 
 - (void)viewDidLayoutSubviews {
     %orig;
-    InstallHoldSpeed((UIViewController *)self);   // retry if -viewDidAppear: ran too early
+    InstallHoldSpeed((UIViewController *)self);
 }
 
-// Apollo's press-drag scrub. On .began the original snapshots player.rate into
-// its `initialRate` ivar (and pauses); on .ended/.cancelled/.failed it resumes
-// with that captured rate. If a hold is engaged when the scrub starts, release
-// it BEFORE %orig so that snapshot sees the clean pre-hold rate — otherwise
-// Apollo re-applies 2× after the finger lifts and the video stays fast forever
-// (the "scrub + hold sticks 2×" bug).
 - (void)scrollViewScrubbed:(UIGestureRecognizer *)gestureRecognizer {
     ApolloHoldSpeedHandler *handler = objc_getAssociatedObject(self, &kHoldSpeedHandlerKey);
     UIGestureRecognizerState state = gestureRecognizer.state;
@@ -544,14 +502,27 @@ static void InstallHoldSpeed(UIViewController *mvc) {
         state == UIGestureRecognizerStateCancelled ||
         state == UIGestureRecognizerStateFailed) {
         handler.scrubbing = NO;
+        ApolloLog(@"VideoHoldSpeed: scrub ended (player rate=%.2f)",
+                  MediaViewerPlayer((UIViewController *)self).rate);
     }
 }
 
 %end
 
-%end // VideoHoldSpeed end
-
+// NOTE: an explicit %ctor MUST call %init itself — Logos does not auto-generate
+// hook installation when a custom constructor exists (this exact omission is
+// what previously killed every hook in the unmute module).
 %ctor {
-    %init(VideoHoldSpeed);
-    NSLog(@"ApolloVideoHoldSpeed: loaded (hold right third of video for 2x)");
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:@"HOLD_SPEED_ENABLED"] != nil) {
+        sVideoHoldSpeedEnabled = [defaults boolForKey:@"HOLD_SPEED_ENABLED"];
+    } else {
+        sVideoHoldSpeedEnabled = YES;
+    }
+    sVideoHoldSpeed = ApolloSanitizedHoldSpeed([defaults floatForKey:@"HOLD_SPEED"]);
+
+    %init();
+
+    ApolloLog(@"VideoHoldSpeed: module loaded (enabled=%d, speed=%.2f)",
+              sVideoHoldSpeedEnabled, sVideoHoldSpeed);
 }

@@ -70,8 +70,64 @@ static const char kARCompletion = '\0';
         return %orig;
     }
 
-    // Prefer the full redirect_uri from the auth URL (set by our
-    // RDKOAuthCredential hook). Falls back to the callback scheme otherwise.
+    // Ensure the OAuth grant carries every scope Apollo functionality needs.
+    // Tokens freeze scopes at grant time, so this must run before ANY login
+    // path (native apollo:// callback or our WKWebView interception).
+    // Missing scopes surface as: saved posts never persist (/api/save 403),
+    // NSFW subreddits gated ("Go to Reddit..."), votes/messages failing.
+    {
+        NSURLComponents *components = [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO];
+        NSArray<NSString *> *requiredScopes = @[
+            @"identity", @"edit", @"flair", @"history", @"modconfig", @"modflair",
+            @"modlog", @"modposts", @"modwiki", @"mysubreddits", @"privatemessages",
+            @"read", @"report", @"save", @"submit", @"subscribe", @"vote",
+            @"wikiedit", @"wikiread", @"nsfw",
+        ];
+        if (components) {
+            NSMutableArray *queryItems = [components.queryItems mutableCopy];
+            if (!queryItems) queryItems = [NSMutableArray array];
+
+            NSURLQueryItem *scopeItem = nil;
+            for (NSURLQueryItem *item in queryItems) {
+                if ([item.name isEqualToString:@"scope"]) {
+                    scopeItem = item;
+                    break;
+                }
+            }
+
+            NSMutableSet *present = [NSMutableSet set];
+            NSMutableArray *existingParts = [NSMutableArray array];
+            if (scopeItem.value.length) {
+                // Grant strings separate scopes with '+' or encoded spaces.
+                for (NSString *part in [scopeItem.value componentsSeparatedByCharactersInSet:
+                        [NSCharacterSet characterSetWithCharactersInString:@"+ "]]) {
+                    if (part.length) {
+                        [present addObject:part];
+                        [existingParts addObject:part];
+                    }
+                }
+            }
+
+            NSMutableArray *missing = [NSMutableArray array];
+            for (NSString *required in requiredScopes) {
+                if (![present containsObject:required]) [missing addObject:required];
+            }
+
+            if (missing.count > 0) {
+                [existingParts addObjectsFromArray:missing];
+                if (scopeItem) [queryItems removeObject:scopeItem];
+                [queryItems addObject:[NSURLQueryItem queryItemWithName:@"scope"
+                                                                  value:[existingParts componentsJoinedByString:@"+"]]];
+                components.queryItems = queryItems;
+                authURL = components.URL;
+                NSLog(@"[WebAuth] ensured OAuth scopes, added: %@",
+                      [missing componentsJoinedByString:@", "]);
+            }
+        }
+    }
+
+    // Prefer the full redirect_uri from the (possibly scope-updated) auth URL
+    // (set by our RDKOAuthCredential hook). Falls back to the callback scheme otherwise.
     NSString *callbackScheme = objc_getAssociatedObject(self, &kARScheme);
     NSString *interceptRedirectURI = callbackScheme.length ? [callbackScheme stringByAppendingString:@"://"] : nil;
     for (NSURLQueryItem *item in [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO].queryItems) {
@@ -87,35 +143,6 @@ static const char kARCompletion = '\0';
         return %orig;
     }
 
-    // Add nsfw scope to OAuth URL for mature content access
-    NSURLComponents *components = [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO];
-    if (components) {
-        NSMutableArray *queryItems = [components.queryItems mutableCopy];
-        if (!queryItems) queryItems = [NSMutableArray array];
-        
-        NSURLQueryItem *scopeItem = nil;
-        for (NSURLQueryItem *item in queryItems) {
-            if ([item.name isEqualToString:@"scope"]) {
-                scopeItem = item;
-                break;
-            }
-        }
-        
-        if (scopeItem) {
-            NSString *currentScope = scopeItem.value;
-            if (![currentScope containsString:@"nsfw"]) {
-                NSString *newScope = [currentScope stringByAppendingString:@"+nsfw"];
-                [queryItems removeObject:scopeItem];
-                [queryItems addObject:[NSURLQueryItem queryItemWithName:@"scope" value:newScope]];
-            }
-        } else {
-            [queryItems addObject:[NSURLQueryItem queryItemWithName:@"scope" value:@"identity+read+vote+submit+nsfw"]];
-        }
-        
-components.queryItems = queryItems;
-        authURL = components.URL;
-    }
-    
     UIWindow *window = nil;
     if (@available(iOS 13.0, *)) {
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
