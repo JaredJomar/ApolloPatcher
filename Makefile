@@ -3,10 +3,10 @@ FINALPACKAGE = 1
 
 ifeq ($(THEOS_PACKAGE_SCHEME),rootless)
 ARCHS = arm64
-TARGET = iphone:16.5:15.0
+TARGET = iphone:17.0:15.0
 else ifeq ($(THEOS_PACKAGE_SCHEME),roothide)
 ARCHS = arm64
-TARGET = iphone:16.5:15.0
+TARGET = iphone:17.0:15.0
 else
 ARCHS = armv7 arm64
 TARGET = iphone:14.5:10.0
@@ -20,8 +20,8 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = ApolloPatcher
 
-$(TWEAK_NAME)_FILES = Tweak.xm SettingsController.m fishhook.c
-$(TWEAK_NAME)_FRAMEWORKS = UIKit SafariServices
+$(TWEAK_NAME)_FILES = Tweak.xm SettingsController.m Patches/ApolloVideoHoldSpeed.xm Patches/ApolloWebAuthViewController.m Patches/ApolloVideoPlaybackSpeed.xm Patches/ApolloVideoUnmute.xm Patches/ApolloLinkPreviewCacheSimple.m Patches/ApolloLinkPreviewModelSimple.m Patches/ApolloLinkPreviewFetcherSimple.m Patches/ApolloInlineLinkPreviewsSimple.xm fishhook.c
+$(TWEAK_NAME)_FRAMEWORKS = UIKit SafariServices WebKit AVFoundation
 $(TWEAK_NAME)_PRIVATE_FRAMEWORKS = Preferences
 $(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 
