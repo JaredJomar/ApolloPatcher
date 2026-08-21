@@ -10,7 +10,7 @@ static NSString *const kAppIconKey = @"AppIcon";
 
 %hook UIApplication
 
-- (void)setAlternateIconName:(NSString * _Nullable)iconName completionHandler:(void (^ _Nullable)(NSError * _Nullable))completionHandler {
+- (void)setAlternateIconName:(NSString *)iconName completionHandler:(void (^)(NSError *))completionHandler {
     NSString *selectedIcon = [[NSUserDefaults standardUserDefaults] stringForKey:kAppIconKey];
     if (selectedIcon && selectedIcon.length > 0 && ![selectedIcon isEqualToString:@"default"]) {
         %orig(selectedIcon, completionHandler);
@@ -19,7 +19,7 @@ static NSString *const kAppIconKey = @"AppIcon";
     }
 }
 
-- (NSArray<NSString *> * _Nullable)supportsAlternateIcons {
+- (NSArray<NSString *> *)supportsAlternateIcons {
     return @[@"default", @"icon-blue", @"icon-red", @"icon-green", @"icon-purple", @"icon-orange", @"icon-pink", @"icon-teal", @"icon-gold", @"icon-dark"];
 }
 
