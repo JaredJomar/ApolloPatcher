@@ -12,7 +12,6 @@ static NSString *const kUnmuteCommentsKey = @"UNMUTE_COMMENTS";
 static NSString *const kUnmuteFeedKey = @"UNMUTE_FEED";
 static NSString *const kFeedUnmutedMemoryKey = @"FEED_UNMUTED_MEMORY";
 static NSString *const kHoldSpeedKey = @"HOLD_SPEED";
-static NSString *const kAppIconKey = @"AppIcon";
 
 // Backup/restore schema
 static NSString *const kBackupVersionKey = @"ApolloPatcherBackupVersion";
@@ -84,7 +83,7 @@ static NSInteger const kBackupCurrentVersion = 1;
 #pragma mark - Table View Data Source
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 7;
+    return 6;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -94,8 +93,7 @@ static NSInteger const kBackupCurrentVersion = 1;
         case 2: return 3; // Video Playback
         case 3: return 3; // Auto-unmute
         case 4: return 1; // Hold Speed
-        case 5: return 3; // App Icon Changer + Backup
-        case 6: return 5; // Links & Credits
+        case 5: return 3; // Backup + Links
         default: return 0;
     }
 }
@@ -203,52 +201,23 @@ static NSInteger const kBackupCurrentVersion = 1;
             }
             break;
             
-        case 5: // App Icon Changer + Backup
+        case 5: // Backup
             if (indexPath.row == 0) {
-                cell.textLabel.text = @"App Icon";
-                NSString *currentIcon = [_defaults stringForKey:kAppIconKey] ?: @"default";
-                cell.detailTextLabel.text = currentIcon;
-                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            } else if (indexPath.row == 1) {
                 cell.textLabel.text = @"Export Backup";
                 cell.detailTextLabel.text = @"Export settings, favorites, API keys";
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            } else if (indexPath.row == 2) {
+            } else if (indexPath.row == 1) {
                 cell.textLabel.text = @"Import Backup";
                 cell.detailTextLabel.text = @"Import from .plist file";
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            } else if (indexPath.row == 2) {
+                cell.textLabel.text = @"Links & Credits";
+                cell.detailTextLabel.text = @"GitHub, Twitter, Donate, How to Use";
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             }
             break;
             
-        case 6: // Links & Credits
-            switch (indexPath.row) {
-                case 0:
-                    cell.textLabel.text = @"GitHub Repository";
-                    cell.detailTextLabel.text = @"github.com/ichitaso/ApolloPatcher";
-                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                    break;
-                case 1:
-                    cell.textLabel.text = @"Twitter / X";
-                    cell.detailTextLabel.text = @"@ichitaso";
-                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                    break;
-                case 2:
-                    cell.textLabel.text = @"Donate";
-                    cell.detailTextLabel.text = @"Support the developer";
-                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                    break;
-                case 3:
-                    cell.textLabel.text = @"How to Use";
-                    cell.detailTextLabel.text = @"Setup guide";
-                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                    break;
-                case 4:
-                    cell.textLabel.text = @"App Icon Changer";
-                    cell.detailTextLabel.text = @"Change Apollo app icon";
-                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                    break;
-            }
-            break;
+        
     }
     
     return cell;
@@ -261,8 +230,7 @@ static NSInteger const kBackupCurrentVersion = 1;
         case 2: return @"Video Playback Speed";
         case 3: return @"Auto-Unmute Videos";
         case 4: return @"Hold Speed";
-        case 5: return @"App Icon & Backup";
-        case 6: return @"Links & Credits";
+        case 5: return @"Backup";
         default: return nil;
     }
 }
@@ -273,6 +241,7 @@ static NSInteger const kBackupCurrentVersion = 1;
         case 2: return @"Long-press video → Playback Speed menu now includes 0.75× and 1.25×. Requires app restart.";
         case 3: return @"Controls automatic unmuting of videos. 'Remember' modes persist your manual mute/unmute choice.";
         case 4: return @"Playback speed when holding on a video. Default is 2.0x. Requires app restart.";
+        case 5: return @"Export/Import settings, favorites, and API keys. Links to GitHub, Twitter, Donate, How to Use.";
         default: return nil;
     }
 }
@@ -299,17 +268,14 @@ static NSInteger const kBackupCurrentVersion = 1;
         case 4: // Hold Speed
             [self showHoldSpeedAlert];
             break;
-        case 5: // App Icon & Backup
+        case 5: // Backup
             if (indexPath.row == 0) {
-                [self showAppIconSelector];
-            } else if (indexPath.row == 1) {
                 [self exportBackup];
-            } else if (indexPath.row == 2) {
+            } else if (indexPath.row == 1) {
                 [self importBackup];
+            } else if (indexPath.row == 2) {
+                [self handleLinkRow:indexPath.row];
             }
-            break;
-        case 6: // Links & Credits
-            [self handleLinkRow:indexPath.row];
             break;
     }
 }
@@ -397,9 +363,6 @@ static NSInteger const kBackupCurrentVersion = 1;
         case 1: url = [NSURL URLWithString:@"https://twitter.com/ichitaso"]; break;
         case 2: url = [NSURL URLWithString:@"https://cydia.ichitaso.com/donation.html"]; break;
         case 3: url = [NSURL URLWithString:@"https://cydia.ichitaso.com/depiction/apollopatcher.html"]; break;
-        case 4:
-            [self showAppIconSelector];
-            return;
     }
     if (url) {
         SFSafariViewController *safari = [[SFSafariViewController alloc] initWithURL:url];
@@ -407,31 +370,7 @@ static NSInteger const kBackupCurrentVersion = 1;
     }
 }
 
-- (void)showAppIconSelector {
-    NSArray *icons = @[@"default", @"icon-blue", @"icon-red", @"icon-green", @"icon-purple", @"icon-orange", @"icon-pink", @"icon-teal", @"icon-gold", @"icon-dark"];
-    NSArray *titles = @[@"Default", @"Blue", @"Red", @"Green", @"Purple", @"Orange", @"Pink", @"Teal", @"Gold", @"Dark"];
-    NSInteger current = [icons indexOfObject:[_defaults stringForKey:kAppIconKey] ?: @"default"];
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"App Icon" message:@"Select an app icon (requires app restart)" preferredStyle:UIAlertControllerStyleActionSheet];
-    for (NSInteger i = 0; i < icons.count; i++) {
-        UIAlertActionStyle style = (i == current) ? UIAlertActionStyleDefault : UIAlertActionStyleDefault;
-        [alert addAction:[UIAlertAction actionWithTitle:titles[i] style:style handler:^(UIAlertAction *action) {
-            [_defaults setObject:icons[i] forKey:kAppIconKey];
-            [_defaults synchronize];
-            [self.tableView reloadData];
-            UIAlertController *restartAlert = [UIAlertController alertControllerWithTitle:@"Restart Required" message:@"The app icon will change after you close and reopen Apollo." preferredStyle:UIAlertControllerStyleAlert];
-            [restartAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:restartAlert animated:YES completion:nil];
-        }]];
-    }
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    
-    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
-        alert.popoverPresentationController.sourceView = self.view;
-        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
-    }
-    [self presentViewController:alert animated:YES completion:nil];
-}
+
 
 - (void)exportBackup {
     UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Export Backup"
