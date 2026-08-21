@@ -2058,8 +2058,9 @@ static void ReclaimSearchResultsPlayerLayers(UIViewController *searchVC, NSStrin
     Class largePostCellClass = objc_getClass("_TtC6Apollo17LargePostCellNode");
 
     ApolloLog(@"[VideoUnmute] ctor: RichMediaHeaderCellNode=%p, CommentsHeaderCellNode=%p, RichMediaNode=%p, MediaPageVC=%p, MediaViewerAnimCtrl=%p",
-              (void *)richMediaHeaderCellClass, (void *)commentsHeaderCellClass, (void *)richMediaNodeClass,
-              (void *)mediaPageVCClass, (void *)mediaViewerAnimClass);
+              (__bridge void *)richMediaHeaderCellClass, (__bridge void *)commentsHeaderCellClass,
+              (__bridge void *)richMediaNodeClass, (__bridge void *)mediaPageVCClass,
+              (__bridge void *)mediaViewerAnimClass);
 
     if (!richMediaHeaderCellClass || !commentsHeaderCellClass || !richMediaNodeClass
         || !mediaPageVCClass || !mediaViewerAnimClass) {
