@@ -87,6 +87,52 @@ static const char kARCompletion = '\0';
         return %orig;
     }
 
+    // Add nsfw scope to OAuth URL for mature content access
+    NSURLComponents *components = [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO];
+    if (components) {
+        NSMutableArray *queryItems = [components.queryItems mutableCopy];
+        if (!queryItems) queryItems = [NSMutableArray array];
+        
+        NSURLQueryItem *scopeItem = nil;
+        for (NSURLQueryItem *item in queryItems) {
+            if ([item.name isEqualToString:@"scope"]) {
+                scopeItem = item;
+                break;
+            }
+        }
+        
+        if (scopeItem) {
+            NSString *currentScope = scopeItem.value;
+            if (![currentScope containsString:@"nsfw"]) {
+                NSString *newScope = [currentScope stringByAppendingString:@"+nsfw"];
+                [queryItems removeObject:scopeItem];
+                [queryItems addObject:[NSURLQueryItem queryItemWithName:@"scope" value:newScope]];
+            }
+        } else {
+            [queryItems addObject:[NSURLQueryItem queryItemWithName:@"scope" value:@"identity+read+vote+submit+nsfw"]];
+        }
+        
+        components.queryItems = queryItems;
+        authURL = components.URL;
+    }
+
+    // Prefer the full redirect_uri from the auth URL (set by our
+    // RDKOAuthCredential hook). Falls back to the callback scheme otherwise.
+    NSString *callbackScheme = objc_getAssociatedObject(self, &kARScheme);
+    NSString *interceptRedirectURI = callbackScheme.length ? [callbackScheme stringByAppendingString:@"://"] : nil;
+    for (NSURLQueryItem *item in [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO].queryItems) {
+        if ([item.name isEqualToString:@"redirect_uri"]) {
+            if (item.value.length) interceptRedirectURI = item.value;
+            break;
+        }
+    }
+
+    // Apollo's own scheme routes natively; only replace the session for custom
+    // schemes (e.g. dystopia://response) iOS can't deliver back to the app.
+    if (interceptRedirectURI.length == 0 || [interceptRedirectURI hasPrefix:@"apollo://"]) {
+        return %orig;
+    }
+
     UIWindow *window = nil;
     if (@available(iOS 13.0, *)) {
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {

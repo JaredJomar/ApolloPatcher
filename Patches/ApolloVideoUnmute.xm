@@ -469,6 +469,30 @@ if (!applied && event == 0 && (richMediaNode || crosspostNode)) {
     %orig;
     if (sUnmuteFeedVideos == 0) return;
     HandleFeedCellVisibilityEvent(self, event);
+    
+    // Force unmute for RedGIFs videos
+    if (event != 2 && sUnmuteFeedVideos >= 1) {
+        id richMediaNode = GetIvarObjectQuiet(self, "richMediaNode");
+        if (richMediaNode) {
+            id videoNode = GetVideoNodeFromRichMediaNode(richMediaNode);
+            if (videoNode) {
+                AVPlayer *player = GetPlayerFromVideoNode(videoNode);
+                if (player) {
+                    NSURL *assetURL = nil;
+                    if ([player.currentItem.asset isKindOfClass:[AVURLAsset class]]) {
+                        assetURL = ((AVURLAsset *)player.currentItem.asset).URL;
+                    }
+                    if (assetURL && [assetURL.absoluteString containsString:@"redgifs.com"]) {
+                        if (sUnmuteFeedVideos >= 1) {
+                            sFeedAudibleRichMediaNode = richMediaNode;
+                            sFeedAudibleVideoNode = videoNode;
+                            UnmuteRichMediaNode(richMediaNode, videoNode);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 %end
 
