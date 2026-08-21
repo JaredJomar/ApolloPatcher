@@ -659,6 +659,8 @@ static NSInteger sectionCount;
         %orig;
     }
 }
+%end
+
 %end // SettingsViewController end
 
 // Sideload fixes
