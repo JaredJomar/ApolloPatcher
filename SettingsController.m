@@ -182,7 +182,7 @@ textspec = [PSTextFieldSpecifier preferenceSpecifierNamed:@"User Agent"
         [spec setProperty:@"Video playback and audio behavior." forKey:@"footerText"];
         [specifiers addObject:spec];
 
-        spec = [PSSpecifier preferenceSpecifierNamed:@"Playback Speed"
+spec = [PSSpecifier preferenceSpecifierNamed:@"Playback Speed"
                                               target:self
                                                  set:nil
                                                  get:nil
@@ -192,25 +192,25 @@ textspec = [PSTextFieldSpecifier preferenceSpecifierNamed:@"User Agent"
         [spec setProperty:@"Long-press video → Playback Speed menu now includes 0.75× and 1.25×." forKey:@"footerText"];
         [specifiers addObject:spec];
 
-        PSSegmentedControlSpecifier *segmentspec = [PSSegmentedControlSpecifier preferenceSpecifierNamed:@"Unmute Videos in Comments"
-                                                                      target:self
-                                                                         set:@selector(setPreferenceValue:specifier:)
-                                                                         get:@selector(readPreferenceValue:)
-                                                                      detail:nil
-                                                                        cell:PSSegmentedControlCell
-                                                                        edit:nil];
+        PSSpecifier *segmentspec = [PSSpecifier preferenceSpecifierNamed:@"Unmute Videos in Comments"
+                                                                   target:self
+                                                                      set:@selector(setPreferenceValue:specifier:)
+                                                                      get:@selector(readPreferenceValue:)
+                                                                   detail:nil
+                                                                     cell:PSSegmentCell
+                                                                     edit:nil];
         [segmentspec setProperty:@"UNMUTE_COMMENTS" forKey:@"key"];
         [segmentspec setProperty:@[@"Never", @"Remember from Full Screen", @"Always"] forKey:@"segmentTitles"];
         [segmentspec setProperty:@0 forKey:@"default"];
         [specifiers addObject:segmentspec];
 
-        segmentspec = [PSSegmentedControlSpecifier preferenceSpecifierNamed:@"Unmute Videos in Feed"
-                                                                      target:self
-                                                                         set:@selector(setPreferenceValue:specifier:)
-                                                                         get:@selector(readPreferenceValue:)
-                                                                      detail:nil
-                                                                        cell:PSSegmentedControlCell
-                                                                        edit:nil];
+        segmentspec = [PSSpecifier preferenceSpecifierNamed:@"Unmute Videos in Feed"
+                                                                   target:self
+                                                                      set:@selector(setPreferenceValue:specifier:)
+                                                                      get:@selector(readPreferenceValue:)
+                                                                   detail:nil
+                                                                     cell:PSSegmentCell
+                                                                     edit:nil];
         [segmentspec setProperty:@"UNMUTE_FEED" forKey:@"key"];
         [segmentspec setProperty:@[@"Never", @"Remember", @"Always"] forKey:@"segmentTitles"];
         [segmentspec setProperty:@0 forKey:@"default"];

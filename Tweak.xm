@@ -36,6 +36,7 @@ static NSString *const safariUserAgent = @"Mozilla/5.0 (Macintosh; Intel Mac OS 
     return randomUserAgent;
 }
 %end
+%end
 
 %group CustomOAuth
 
@@ -118,7 +119,6 @@ static const char kARCompletion = '\0';
     return YES;
 }
 
-%end
 %end
 
 @interface NSURLSession (Private)
