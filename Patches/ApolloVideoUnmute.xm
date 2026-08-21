@@ -515,14 +515,12 @@ static void HandleCommentsRichMediaVisibilityEvent(id visibilityOwner, id richMe
 }
 %end
 
-%group FeedUnmute
 %hook LargePostCellNode
 - (void)cellNodeVisibilityEvent:(unsigned long long)event inScrollView:(id)scrollView withCellFrame:(CGRect)frame {
     %orig;
     if (sUnmuteFeedVideos == 0) return;
     HandleFeedCellVisibilityEvent(self, event);
 }
-%end
 %end
 
 %hook RichMediaNode
