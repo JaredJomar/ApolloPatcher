@@ -74,8 +74,8 @@ static const char kARCompletion = '\0';
     // Tokens freeze scopes at grant time, so this must run before ANY login
     // path (native apollo:// callback or our WKWebView interception).
     // Missing scopes surface as: saved posts never persist (/api/save 403),
-    // votes/messages failing. NOTE: no 'nsfw' OAuth scope exists (verified
-    // against reddit.com/api/v1/scopes); adult content is account-level.
+    // votes/messages failing. NOTE: requesting scopes absent from Reddit's
+    // official scope list breaks the grant; adult content is account-level.
     {
         NSURLComponents *components = [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO];
         NSArray<NSString *> *requiredScopes = @[
