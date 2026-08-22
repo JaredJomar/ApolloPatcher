@@ -88,7 +88,7 @@ static NSInteger const kBackupCurrentVersion = 1;
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
-        case 0: return 1; // Info
+        case 0: return 2; // Info (version + video audio engine diag)
         case 1: return 4; // Custom API
         case 2: return 3; // Video Playback
         case 3: return 3; // Auto-unmute
