@@ -127,8 +127,9 @@ static NSInteger const kBackupCurrentVersion = 1;
                 NSString *diag = [_defaults stringForKey:@"UNMUTE_DIAG"] ?: @"not run yet";
                 NSString *feedEvt = [_defaults stringForKey:@"UNMUTE_EVT_FEED"] ?: @"no feed evt";
                 NSString *commentsEvt = [_defaults stringForKey:@"UNMUTE_EVT_COMMENTS"] ?: @"no comments evt";
-                cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ | %@ | %@",
-                                             diag, feedEvt, commentsEvt];
+                NSString *bail = [_defaults stringForKey:@"UNMUTE_BAIL"] ?: @"no bail";
+                cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ | %@ | %@ | %@",
+                                             diag, feedEvt, commentsEvt, bail];
             }
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.selectionStyle = UITableViewCellSelectionStyleNone;
