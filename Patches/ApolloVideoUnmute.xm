@@ -661,6 +661,14 @@ static void MutePreviouslyAudibleFeedVideo(AVPlayer *incoming) {
     ApolloLog(@"[VideoUnmute] Feed audio handed to the next video - muted the previous one");
 }
 
+// Live diagnostic: record WHY the unmute chain bailed, value-change throttled.
+static void ApolloUnmuteNoteBail(NSString *reason) {
+    static NSString *sLastBail = nil;
+    if ([reason isEqualToString:sLastBail]) return;
+    sLastBail = [reason copy];
+    [[NSUserDefaults standardUserDefaults] setObject:reason forKey:@"UNMUTE_BAIL"];
+}
+
 // Make a feed video audible when the mode calls for it. Returns YES once the
 // unmute has been applied (or was already in force), NO when the video isn't
 // eligible yet — the caller uses that to decide whether to schedule a retry.
@@ -670,10 +678,16 @@ static BOOL ApplyFeedUnmuteIfNeeded(id richMediaNode, NSString *reason) {
     if (GetIvarBool(richMediaNode, "isShownInCommentsHeader")) return NO;
 
     id videoNode = GetVideoNodeFromRichMediaNode(richMediaNode);
-    if (!videoNode) return NO;
+    if (!videoNode) {
+        ApolloUnmuteNoteBail(@"bail:no-videonode");
+        return NO;
+    }
 
     AVPlayer *player = GetPlayerFromVideoNode(videoNode);
-    if (!player) return NO;
+    if (!player) {
+        ApolloUnmuteNoteBail(@"bail:no-player");
+        return NO;
+    }
     if (ApolloPiP_IsOwnedPlayer(player)) return NO;
 
     // Steady state: already the audible one. Cheapest possible early-out, and
@@ -682,9 +696,15 @@ static BOOL ApplyFeedUnmuteIfNeeded(id richMediaNode, NSString *reason) {
 
     // Only the video Apollo actually chose to autoplay. Unmuting a paused
     // neighbour would produce no sound but a wrong "unmuted" button icon.
-    if ([player rate] <= 0.0f) return NO;
+    if ([player rate] <= 0.0f) {
+        ApolloUnmuteNoteBail([NSString stringWithFormat:@"bail:rate=%.2f", player.rate]);
+        return NO;
+    }
 
-    if (!FeedVideosShouldBeAudible()) return NO;
+    if (!FeedVideosShouldBeAudible()) {
+        ApolloUnmuteNoteBail(@"bail:audible-no");
+        return NO;
+    }
 
     MutePreviouslyAudibleFeedVideo(player);
 
