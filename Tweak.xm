@@ -74,7 +74,8 @@ static const char kARCompletion = '\0';
     // Tokens freeze scopes at grant time, so this must run before ANY login
     // path (native apollo:// callback or our WKWebView interception).
     // Missing scopes surface as: saved posts never persist (/api/save 403),
-    // NSFW subreddits gated ("Go to Reddit..."), votes/messages failing.
+    // votes/messages failing. NOTE: no 'nsfw' OAuth scope exists (verified
+    // against reddit.com/api/v1/scopes); adult content is account-level.
     {
         NSURLComponents *components = [NSURLComponents componentsWithURL:authURL resolvingAgainstBaseURL:NO];
         NSArray<NSString *> *requiredScopes = @[
@@ -755,9 +756,10 @@ static OSStatus SecItemUpdate_replacement(CFDictionaryRef query, CFDictionaryRef
     @autoreleasepool {
         kCustomID = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"Custom_ID"] ?: nil copy];
         kClientID = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"IMGUR_ID"] ?: @"8b15a972041abb1" copy];
-        // Only honored when explicitly set; leaving it empty keeps Apollo's
-        // stock apollo:// callback and native ASWebAuthenticationSession routing.
-        kRedirectURI = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"REDIRECT_URI"] copy];
+        // Dystopia method default: user Reddit apps register dystopia://response,
+        // which Apollo can't route natively — the CustomOAuth WKWebView flow
+        // intercepts that callback instead. Set REDIRECT_URI to override.
+        kRedirectURI = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"REDIRECT_URI"] ?: @"dystopia://response" copy];
         kUserAgent = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"USER_AGENT"] ?: @"ios:com.CarbonDev.Dystopia:v1.0.1(by /u/DystopiaForReddit)" copy];
         // Suppress wallpaper prompt
         NSDate *dateIn90d = [NSDate dateWithTimeIntervalSinceNow:60*60*24*90];
