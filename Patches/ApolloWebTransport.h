@@ -1,5 +1,7 @@
 #import <Foundation/Foundation.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,3 +19,5 @@ NSURLRequest * _Nullable ApolloWebTransportRewriteRequest(NSURLRequest *request)
 #ifdef __cplusplus
 }
 #endif
+
+NS_ASSUME_NONNULL_END
