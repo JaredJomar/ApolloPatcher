@@ -129,8 +129,8 @@ static __weak id sFeedAudibleVideoNode = nil;
 static NSUInteger sFeedUnmuteRetryGeneration = 0;
 
 // Mode selectors, read once per launch from the ApolloPatcher preference keys.
-static NSInteger sUnmuteCommentsVideos = 0;
-static NSInteger sUnmuteFeedVideos = 0;
+static NSInteger sUnmuteCommentsVideos = 2;
+static NSInteger sUnmuteFeedVideos = 2;
 static NSString *const kUnmuteCommentsPrefKey = @"UNMUTE_COMMENTS";
 static NSString *const kUnmuteFeedPrefKey    = @"UNMUTE_FEED";
 static NSString *const kFeedUnmutedMemoryKey = @"FEED_UNMUTED_MEMORY";
@@ -2047,8 +2047,13 @@ static void ReclaimSearchResultsPlayerLayers(UIViewController *searchVC, NSStrin
 // =============================================================================
 
 %ctor {
-    sUnmuteCommentsVideos = [[NSUserDefaults standardUserDefaults] integerForKey:kUnmuteCommentsPrefKey];
-    sUnmuteFeedVideos     = [[NSUserDefaults standardUserDefaults] integerForKey:kUnmuteFeedPrefKey];
+    // Fork default: Always (audible everywhere, matching Reborn with its
+    // toggles enabled). Absent keys resolve to 2; write UNMUTE_COMMENTS or
+    // UNMUTE_FEED as 0 (never) or 1 (remember) to tone it down.
+    id commentsModeRaw = [[NSUserDefaults standardUserDefaults] objectForKey:kUnmuteCommentsPrefKey];
+    sUnmuteCommentsVideos = [commentsModeRaw isKindOfClass:[NSNumber class]] ? [commentsModeRaw integerValue] : 2;
+    id feedModeRaw = [[NSUserDefaults standardUserDefaults] objectForKey:kUnmuteFeedPrefKey];
+    sUnmuteFeedVideos = [feedModeRaw isKindOfClass:[NSNumber class]] ? [feedModeRaw integerValue] : 2;
 
     Class richMediaHeaderCellClass = objc_getClass("_TtC6Apollo23RichMediaHeaderCellNode");
     Class commentsHeaderCellClass = objc_getClass("_TtC6Apollo22CommentsHeaderCellNode");
