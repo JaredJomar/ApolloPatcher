@@ -81,7 +81,7 @@ static const char kARCompletion = '\0';
             @"identity", @"edit", @"flair", @"history", @"modconfig", @"modflair",
             @"modlog", @"modposts", @"modwiki", @"mysubreddits", @"privatemessages",
             @"read", @"report", @"save", @"submit", @"subscribe", @"vote",
-            @"wikiedit", @"wikiread", @"nsfw",
+            @"wikiedit", @"wikiread",
         ];
         if (components) {
             NSMutableArray *queryItems = [components.queryItems mutableCopy];
@@ -755,7 +755,9 @@ static OSStatus SecItemUpdate_replacement(CFDictionaryRef query, CFDictionaryRef
     @autoreleasepool {
         kCustomID = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"Custom_ID"] ?: nil copy];
         kClientID = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"IMGUR_ID"] ?: @"8b15a972041abb1" copy];
-        kRedirectURI = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"REDIRECT_URI"] ?: @"dystopia://response" copy];
+        // Only honored when explicitly set; leaving it empty keeps Apollo's
+        // stock apollo:// callback and native ASWebAuthenticationSession routing.
+        kRedirectURI = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"REDIRECT_URI"] copy];
         kUserAgent = (id)[[[NSUserDefaults standardUserDefaults] objectForKey:@"USER_AGENT"] ?: @"ios:com.CarbonDev.Dystopia:v1.0.1(by /u/DystopiaForReddit)" copy];
         // Suppress wallpaper prompt
         NSDate *dateIn90d = [NSDate dateWithTimeIntervalSinceNow:60*60*24*90];
