@@ -132,7 +132,9 @@
             id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
             if ([json isKindOfClass:[NSDictionary class]]) {
                 id name = json[@"data"][@"name"];
-                if ([name isKindOfClass:[NSString class]] && name.length > 0) username = name;
+                if ([name isKindOfClass:[NSString class]] && [(NSString *)name length] > 0) {
+                    username = name;
+                }
             }
         }
         if (username) {
