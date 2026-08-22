@@ -119,8 +119,13 @@ static NSInteger const kBackupCurrentVersion = 1;
     
     switch (indexPath.section) {
         case 0: // Info
-            cell.textLabel.text = @"ApolloPatcher";
-            cell.detailTextLabel.text = @"v0.1.1";
+            if (indexPath.row == 0) {
+                cell.textLabel.text = @"ApolloPatcher";
+                cell.detailTextLabel.text = @"v0.1.1";
+            } else {
+                cell.textLabel.text = @"Video Audio Engine";
+                cell.detailTextLabel.text = [_defaults stringForKey:@"UNMUTE_DIAG"] ?: @"not run yet";
+            }
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.selectionStyle = UITableViewCellSelectionStyleNone;
             break;

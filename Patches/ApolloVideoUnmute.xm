@@ -555,6 +555,11 @@ static void UnmuteRichMediaNode(id richMediaNode, id videoNode) {
     // (no scroll event fires for a programmatic unmute).
     ApolloPiP_NoteInlineVideoAudible(videoNode, player);
 
+    static BOOL sDiagFiredWritten = NO;
+    if (!sDiagFiredWritten) {
+        sDiagFiredWritten = YES;
+        [[NSUserDefaults standardUserDefaults] setObject:@"FIRED" forKey:@"UNMUTE_DIAG"];
+    }
     ApolloLog(@"[VideoUnmute] Auto-unmute complete for player %p", player);
 }
 
@@ -2069,8 +2074,18 @@ static void ReclaimSearchResultsPlayerLayers(UIViewController *searchVC, NSStrin
 
     if (!richMediaHeaderCellClass || !commentsHeaderCellClass || !richMediaNodeClass
         || !mediaPageVCClass || !mediaViewerAnimClass) {
-        ApolloLog(@"[VideoUnmute] ctor: FATAL - required classes not found!");
-        return;
+      NSMutableString *missing = [NSMutableString stringWithString:@"FATAL missing:"];
+      if (!richMediaHeaderCellClass) [missing appendString:@" RichMediaHeaderCellNode"];
+      if (!commentsHeaderCellClass) [missing appendString:@" CommentsHeaderCellNode"];
+      if (!richMediaNodeClass) [missing appendString:@" RichMediaNode"];
+      if (!mediaPageVCClass) [missing appendString:@" MediaPageViewController"];
+      if (!mediaViewerAnimClass) [missing appendString:@" MediaViewerAnimationController"];
+      [[NSUserDefaults standardUserDefaults] setObject:missing forKey:@"UNMUTE_DIAG"];
+      ApolloLog(@"[VideoUnmute] ctor: %@ (classes=%p,%p,%p,%p,%p)", missing,
+                (__bridge void *)richMediaHeaderCellClass, (__bridge void *)commentsHeaderCellClass,
+                (__bridge void *)richMediaNodeClass, (__bridge void *)mediaPageVCClass,
+                (__bridge void *)mediaViewerAnimClass);
+      return;
     }
 
     %init(
@@ -2095,4 +2110,8 @@ static void ReclaimSearchResultsPlayerLayers(UIViewController *searchVC, NSStrin
     }
 
     ApolloLog(@"[VideoUnmute] ctor: hooks initialized");
+    [[NSUserDefaults standardUserDefaults]
+        setObject:[NSString stringWithFormat:@"OK comments=%ld feed=%ld",
+                   (long)sUnmuteCommentsVideos, (long)sUnmuteFeedVideos]
+        forKey:@"UNMUTE_DIAG"];
 }

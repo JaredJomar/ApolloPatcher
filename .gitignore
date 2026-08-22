@@ -11,4 +11,5 @@ _/*
 *.zip
 *.ipa
 doc/
-.omo*
+.omo*apa/ 
+apa/
