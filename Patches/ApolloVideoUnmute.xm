@@ -685,7 +685,8 @@ static BOOL ApplyFeedUnmuteIfNeeded(id richMediaNode, NSString *reason) {
 
     AVPlayer *player = GetPlayerFromVideoNode(videoNode);
     if (!player) {
-        ApolloUnmuteNoteBail(@"bail:no-player");
+        ApolloUnmuteNoteBail([NSString stringWithFormat:@"bail:no-player %@",
+                              NSStringFromClass([(id)videoNode class])]);
         return NO;
     }
     if (ApolloPiP_IsOwnedPlayer(player)) return NO;
@@ -792,7 +793,9 @@ static void HandleFeedCellVisibilityEvent(id cellNode, unsigned long long event)
     // ticks (1) keep arriving during a scroll and need no retry chain.
     if (!applied && event == 0 && (richMediaNode || crosspostNode)) {
         NSUInteger generation = ++sFeedUnmuteRetryGeneration;
-        ScheduleFeedUnmuteRetry(richMediaNode ?: crosspostNode, 4, generation);
+        // 12 attempts x 350ms ~= 4.2s of patience: Apollo can take a while to
+        // create/attach the AVPlayer after the cell becomes visible.
+        ScheduleFeedUnmuteRetry(richMediaNode ?: crosspostNode, 12, generation);
     }
 }
 
