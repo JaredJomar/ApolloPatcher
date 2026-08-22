@@ -904,6 +904,14 @@ static void HandleCommentsRichMediaVisibilityEvent(id visibilityOwner,
         return;
     }
     %orig;
+    // Live diagnostic: last visibility event seen by this hook.
+    static NSInteger sLastCommentsEvt = -1;
+    if ((NSInteger)event != sLastCommentsEvt) {
+        sLastCommentsEvt = (NSInteger)event;
+        [[NSUserDefaults standardUserDefaults]
+            setObject:[NSString stringWithFormat:@"comments evt=%llu", event]
+            forKey:@"UNMUTE_EVT_COMMENTS"];
+    }
     // event=1 (VisibleRectChanged) fires on every layout tick during scroll.
     // Skip the verbose path entirely — the icon-sync inside SyncMuteButtonIcon
     // is a no-op when state already matches, but the log line itself floods.
@@ -960,6 +968,15 @@ static void HandleCommentsRichMediaVisibilityEvent(id visibilityOwner,
                    inScrollView:(id)scrollView
                   withCellFrame:(CGRect)frame {
     %orig;   // Apollo's midpoint autoplay decision runs here — check after it
+    // Live diagnostic: last visibility event seen by this hook (value-change
+    // throttled so scrolling doesn't flood defaults writes).
+    static NSInteger sLastFeedEvt = -1;
+    if ((NSInteger)event != sLastFeedEvt) {
+        sLastFeedEvt = (NSInteger)event;
+        [[NSUserDefaults standardUserDefaults]
+            setObject:[NSString stringWithFormat:@"feed evt=%llu", event]
+            forKey:@"UNMUTE_EVT_FEED"];
+    }
     if (sUnmuteFeedVideos == 0) return;   // feature off: no extra work per tick
     HandleFeedCellVisibilityEvent(self, event);
 }

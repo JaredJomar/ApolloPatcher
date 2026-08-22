@@ -124,7 +124,11 @@ static NSInteger const kBackupCurrentVersion = 1;
                 cell.detailTextLabel.text = @"v0.1.1";
             } else {
                 cell.textLabel.text = @"Video Audio Engine";
-                cell.detailTextLabel.text = [_defaults stringForKey:@"UNMUTE_DIAG"] ?: @"not run yet";
+                NSString *diag = [_defaults stringForKey:@"UNMUTE_DIAG"] ?: @"not run yet";
+                NSString *feedEvt = [_defaults stringForKey:@"UNMUTE_EVT_FEED"] ?: @"no feed evt";
+                NSString *commentsEvt = [_defaults stringForKey:@"UNMUTE_EVT_COMMENTS"] ?: @"no comments evt";
+                cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ | %@ | %@",
+                                             diag, feedEvt, commentsEvt];
             }
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.selectionStyle = UITableViewCellSelectionStyleNone;
