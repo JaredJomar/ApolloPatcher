@@ -2,6 +2,8 @@
 
 #import <WebKit/WebKit.h>
 
+#import "ApolloWebSessionStore.h"
+
 @interface ApolloWebAuthViewController () <WKNavigationDelegate>
 @property (nonatomic, strong) WKWebView *webView;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
@@ -94,6 +96,55 @@
     }];
 }
 
+#pragma mark - Web session harvest (Reborn-style cookie capture)
+
+// Before tearing the ephemeral WKWebView down, grab every reddit.com cookie
+// and persist them as the account's web session (Reborn-style). Identity comes
+// from a lightweight /api/me.json call carrying the harvested cookie header.
+- (void)_harvestAndFinishWithURL:(NSURL *)url {
+    WKWebsiteDataStore *store = self.webView.configuration.websiteDataStore;
+    [[store httpCookieStore] getAllCookies:^(NSArray<NSHTTPCookie *> *cookies) {
+        NSMutableString *header = [NSMutableString string];
+        for (NSHTTPCookie *cookie in cookies) {
+            if ([cookie.domain containsString:@"reddit.com"]) {
+                if (header.length > 0) [header appendString:@"; "];
+                [header appendFormat:@"%@=%@", cookie.name, cookie.value];
+            }
+        }
+        if (header.length > 0) {
+            [self _storeCookieHeader:header];
+        } else {
+            NSLog(@"ApolloPatcher:[WebAuth] no reddit.com cookies found to harvest");
+        }
+        [self _finishWithURL:url error:nil];
+    }];
+}
+
+- (void)_storeCookieHeader:(NSString *)header {
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc]
+        initWithURL:[NSURL URLWithString:@"https://www.reddit.com/api/me.json"]
+        cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+        timeoutInterval:15.0];
+    [request setValue:header forHTTPHeaderField:@"Cookie"];
+    [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSString *username = nil;
+        if (!error && data) {
+            id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if ([json isKindOfClass:[NSDictionary class]]) {
+                id name = json[@"data"][@"name"];
+                if ([name isKindOfClass:[NSString class]] && name.length > 0) username = name;
+            }
+        }
+        if (username) {
+            ApolloWebSessionSet(username, header, nil);
+            NSLog(@"ApolloPatcher:[WebAuth] stored web session for u/%@ (%lu cookie bytes)",
+                  username, (unsigned long)header.length);
+        } else {
+            NSLog(@"ApolloPatcher:[WebAuth] harvested cookies but identity unresolved (error=%@)", error);
+        }
+    }] resume];
+}
+
 #pragma mark - WKNavigationDelegate
 
 // Matches scheme + host + path against our configured redirect URI, ignoring
@@ -137,7 +188,7 @@ decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
         // request actually goes out over the network (for http/https redirects).
         decisionHandler(WKNavigationActionPolicyCancel);
         NSLog(@"ApolloPatcher:[WebAuth] Intercepted callback: %@", url);
-        [self _finishWithURL:url error:nil];
+        [self _harvestAndFinishWithURL:url];
         return;
     }
 
