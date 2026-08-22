@@ -128,17 +128,25 @@
     [request setValue:header forHTTPHeaderField:@"Cookie"];
     [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         NSString *username = nil;
+        NSString *modhash = nil;
         if (!error && data) {
             id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
             if ([json isKindOfClass:[NSDictionary class]]) {
-                id name = json[@"data"][@"name"];
-                if ([name isKindOfClass:[NSString class]] && [(NSString *)name length] > 0) {
-                    username = name;
+                id payload = json[@"data"];
+                if ([payload isKindOfClass:[NSDictionary class]]) {
+                    id name = payload[@"name"];
+                    if ([name isKindOfClass:[NSString class]] && [(NSString *)name length] > 0) {
+                        username = name;
+                    }
+                    id mh = payload[@"modhash"];
+                    if ([mh isKindOfClass:[NSString class]] && [(NSString *)mh length] > 0) {
+                        modhash = mh;
+                    }
                 }
             }
         }
         if (username) {
-            ApolloWebSessionSet(username, header, nil);
+            ApolloWebSessionSet(username, header, modhash);
             NSLog(@"ApolloPatcher:[WebAuth] stored web session for u/%@ (%lu cookie bytes)",
                   username, (unsigned long)header.length);
         } else {

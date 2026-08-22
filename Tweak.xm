@@ -1,6 +1,7 @@
 #import "header.h"
 #import "fishhook.h"
 #import "Patches/ApolloWebAuthViewController.h"
+#import "Patches/ApolloWebTransport.h"
 #import "SettingsController.h"
 
 static NSString *randomUserAgent = [NSString stringWithFormat:@"iOS: com.%@.%@ v%d.%d.%d (by /u/%@)", RANDSTRING, RANDSTRING, RANDINT, RANDINT, RANDINT, RANDSTRING];
@@ -359,6 +360,18 @@ static NSString *imageID;
         [self setValue:mutableRequest forKey:@"_originalRequest"];
         [self setValue:mutableRequest forKey:@"_currentRequest"];
     } else if ([requestURL containsString:@"https://oauth.reddit.com/"] || [requestURL containsString:@"https://www.reddit.com/"]) {
+        // Optional cookie transport (Reborn-style): route eligible GETs through
+        // the harvested web session so they get web-grade treatment. Falls
+        // through to the stock OAuth path whenever it declines to act.
+        if (ApolloWebTransportEnabled()) {
+            NSURLRequest *transportRequest = ApolloWebTransportRewriteRequest(request);
+            if (transportRequest) {
+                [self setValue:transportRequest forKey:@"_originalRequest"];
+                [self setValue:transportRequest forKey:@"_currentRequest"];
+                %orig;
+                return;
+            }
+        }
         // reddit has blocked the stock user agent; use the configured one (Dystopia default) or a randomized fallback
         // iOS: com.christianselig.Apollo v1.15.11 (by /u/iamthatis)
         [mutableRequest setValue:(kUserAgent.length > 0 ? kUserAgent : randomUserAgent) forHTTPHeaderField:@"User-Agent"];

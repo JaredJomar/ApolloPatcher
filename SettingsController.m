@@ -88,7 +88,7 @@ static NSInteger const kBackupCurrentVersion = 1;
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
-        case 0: return 2; // Info (version + video audio engine diag)
+        case 0: return 3; // Info (version + audio engine diag + web transport toggle)
         case 1: return 4; // Custom API
         case 2: return 3; // Video Playback
         case 3: return 3; // Auto-unmute
@@ -122,7 +122,9 @@ static NSInteger const kBackupCurrentVersion = 1;
             if (indexPath.row == 0) {
                 cell.textLabel.text = @"ApolloPatcher";
                 cell.detailTextLabel.text = @"v0.1.1";
-            } else {
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                cell.selectionStyle = UITableViewCellSelectionStyleNone;
+            } else if (indexPath.row == 1) {
                 cell.textLabel.text = @"Video Audio Engine";
                 NSString *diag = [_defaults stringForKey:@"UNMUTE_DIAG"] ?: @"not run yet";
                 NSString *feedEvt = [_defaults stringForKey:@"UNMUTE_EVT_FEED"] ?: @"no feed evt";
@@ -130,9 +132,15 @@ static NSInteger const kBackupCurrentVersion = 1;
                 NSString *bail = [_defaults stringForKey:@"UNMUTE_BAIL"] ?: @"no bail";
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ | %@ | %@ | %@",
                                              diag, feedEvt, commentsEvt, bail];
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                cell.selectionStyle = UITableViewCellSelectionStyleNone;
+            } else {
+                cell.textLabel.text = @"Web Transport (cookies)";
+                BOOL enabled = [_defaults boolForKey:@"WEB_TRANSPORT_ENABLED"];
+                cell.detailTextLabel.text = enabled ? @"ON" : @"OFF";
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             }
-            cell.accessoryType = UITableViewCellAccessoryNone;
-            cell.selectionStyle = UITableViewCellSelectionStyleNone;
             break;
             
         case 1: // Custom API
@@ -260,6 +268,9 @@ static NSInteger const kBackupCurrentVersion = 1;
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     
     switch (indexPath.section) {
+        case 0:
+            if (indexPath.row == 2) [self toggleWebTransport];
+            break;
         case 1: // Custom API
             [self showTextFieldAlertForRow:indexPath.row];
             break;
@@ -363,6 +374,25 @@ static NSInteger const kBackupCurrentVersion = 1;
             [self.tableView reloadData];
         }
     }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)toggleWebTransport {
+    BOOL current = [_defaults boolForKey:@"WEB_TRANSPORT_ENABLED"];
+    NSString *message = current
+        ? @"Disable routing Reddit read requests through your harvested web session?"
+        : @"Route Reddit read requests through your harvested web session? Takes effect immediately; disable any time.";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Web Transport"
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:current ? @"Disable" : @"Enable"
+                                             style:UIAlertActionStyleDefault
+                                           handler:^(UIAlertAction *action) {
+        [_defaults setBool:!current forKey:@"WEB_TRANSPORT_ENABLED"];
+        [_defaults synchronize];
+        [self.tableView reloadData];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
